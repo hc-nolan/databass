@@ -128,10 +128,11 @@ class TestGetItemId:
 
     def test_successful_non_release_search(self, mocker):
         """Test successful search for non-release items (artist, label)"""
-        mock_response = {"results": [{"id": "789012", "format": "CD"}]}
+        title = "Test Artist"
+        mock_response = {"results": [{"id": "789012", "title": title, "format": "CD"}]}
         mocker.patch.object(Discogs, "request", return_value=mock_response)
 
-        result = Discogs.get_item_id(name="Test Artist", item_type="artist")
+        result = Discogs.get_item_id(name=title, item_type="artist")
         assert result == "789012"
 
     def test_empty_results(self, mocker):
