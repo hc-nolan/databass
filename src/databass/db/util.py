@@ -1,21 +1,22 @@
 from typing import Type
 from sqlalchemy.orm import query as sql_query
-from .models import *
+from .operations import insert
+
+# from .models import *
 # above imports all of the below
-# from sqlalchemy import extract, Integer
-# from sqlalchemy.engine.row import Row
-# from .models import Artist, Release, Label, MusicBrainzEntity, Base, Goal, Genre
+from sqlalchemy import extract, Integer
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.engine.row import Row
+from .models import Artist, Release, Label, MusicBrainzEntity, Base, Goal, Genre
 
 
 def get_valid_models():
     return [cls.__name__.lower() for cls in Base.__subclasses__()]
 
-  
-def apply_comparison_filter(query,
-                      model: Type[MusicBrainzEntity],
-                      key: str,
-                      operator: str,
-                      value: str) -> sql_query:
+
+def apply_comparison_filter(
+    query, model: Type[MusicBrainzEntity], key: str, operator: str, value: str
+) -> sql_query:
     """
     Used by dynamic_search to perform comparisons on begin, end, year, or rating
     :param query: An SQLAlchemy query class
@@ -33,14 +34,14 @@ def apply_comparison_filter(query,
     except TypeError:
         raise TypeError(f"Value must be an integer, got {type(value)}: {value}")
 
-    if operator not in ['<', '=', '>']:
+    if operator not in ["<", "=", ">"]:
         raise ValueError(f"Unrecognized operator value for year_comparison: {operator}")
 
-    if key in ('begin', 'end'):
-        query = query.filter(extract('year', attribute).cast(Integer).op(operator)(val))
-    elif key == 'rating':
+    if key in ("begin", "end"):
+        query = query.filter(extract("year", attribute).cast(Integer).op(operator)(val))
+    elif key == "rating":
         query = query.filter(Release.rating.op(operator)(value))
-    elif key == 'year':
+    elif key == "year":
         query = query.filter(Release.year.op(operator)(value))
     return query
 
@@ -60,7 +61,8 @@ def mean_avg_and_count(entities: list[Row]) -> (int, int):
             count += int(item.release_count)
         except AttributeError:
             # TODO: consider logging info about the erroring release
-            # Have not encountered this in practice, but if it is encountered it means there is a corrupt entry
+            # Have not encountered this in practice, but if it is encountered
+            # it means there is a corrupt entry
             total -= 1
 
     mean_avg = avg / total
@@ -69,11 +71,7 @@ def mean_avg_and_count(entities: list[Row]) -> (int, int):
 
 
 # Utility function used to calculate Bayesian average
-def bayesian_avg(
-        item_weight: float,
-        item_avg: float,
-        mean_avg: float
-) -> float:
+def bayesian_avg(item_weight: float, item_avg: float, mean_avg: float) -> float:
     """
     Calculates the Bayesian average rating for a given item weight and average
     :param item_weight: Float representing the item's weight for the formula;
@@ -111,6 +109,30 @@ def get_all_stats():
     return stats
 
 
+def ensure_db_placeholders():
+    """
+    When no known artist/label is found, handle_submit_data() defaults to setting
+    the ID for the artist/label to 0, which is a placeholder entry for all
+    unknown values.
+
+    This function ensures these entries exist.
+    """
+    label = Label()
+    label.id = 0
+    label.name = "Unknown"
+    try:
+        insert(label)
+    except IntegrityError:
+        pass
+    artist = Artist()
+    artist.id = 0
+    artist.name = "Unknown"
+    try:
+        insert(artist)
+    except IntegrityError:
+        pass
+
+
 def handle_submit_data(submit_data: dict) -> None:
     """
     Process dictionary data from routes.submit()
@@ -121,12 +143,12 @@ def handle_submit_data(submit_data: dict) -> None:
     :return:
     """
     from ..api import MusicBrainz
+
     if submit_data["mbid"]:
         runtime = MusicBrainz.get_release_length(submit_data["mbid"])
         submit_data["runtime"] = runtime
         # If we aren't handling a MusicBrainz release,
         # the user can optionally pass in the runtime and it's already in submit_data
-
 
     if submit_data["label_mbid"]:
         label_id = Label.create_if_not_exist(
@@ -146,9 +168,7 @@ def handle_submit_data(submit_data: dict) -> None:
             name=submit_data["artist_name"],
         )
     elif submit_data["artist_name"]:
-        artist_id = Artist.create_if_not_exist(
-            name=submit_data["artist_name"]
-        )
+        artist_id = Artist.create_if_not_exist(name=submit_data["artist_name"])
     else:
         artist_id = 0
 
@@ -161,7 +181,7 @@ def handle_submit_data(submit_data: dict) -> None:
 
     genres = []
     if submit_data["genres"]:
-        for g in submit_data["genres"].split(','):
+        for g in submit_data["genres"].split(","):
             genres.append(Genre.create_if_not_exists(g))
     submit_data["genres"] = genres
     Release.create_new(submit_data)

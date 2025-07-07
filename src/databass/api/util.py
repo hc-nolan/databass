@@ -6,20 +6,22 @@ from typing import Optional, Literal
 from dotenv import load_dotenv
 
 load_dotenv()
-VERSION = getenv('VERSION')
+VERSION = getenv("VERSION")
 
-JPEG_HEADER = b'\xff\xd8\xff'
-PNG_HEADER = b'\x89PNG\r\n\x1a\n'
+JPEG_HEADER = b"\xff\xd8\xff"
+PNG_HEADER = b"\x89PNG\r\n\x1a\n"
 
 VALID_TYPES = frozenset(["release", "artist", "label"])
-VALID_DATE_TYPES = frozenset(['begin', 'end'])
+VALID_DATE_TYPES = frozenset(["begin", "end"])
 
 YEAR_FORMAT = "%Y"
 MONTH_FORMAT = "%Y-%m"
 DAY_FORMAT = "%Y-%m-%d"
 
+
 class TimeoutException(Exception):
     pass
+
 
 def timeout_handler(signum, frame):
     raise TimeoutException("Request timed out")
@@ -28,7 +30,9 @@ def timeout_handler(signum, frame):
 # Collection of generic utility functions used by other parts of the app
 class Util:
     @staticmethod
-    def to_date(begin_or_end: Literal['begin', 'end'] | None, date_str: str | None) -> datetime.date:
+    def to_date(
+        begin_or_end: Literal["begin", "end"] | None, date_str: str | None
+    ) -> datetime.date:
         """
         Convert a date string or begin/end indicator to a datetime.date object.
 
@@ -45,13 +49,15 @@ class Util:
         date = None
         if not date_str:
             if not begin_or_end:
-                raise ValueError("Must be used with either begin_or_end or date_str, or both")
+                raise ValueError(
+                    "Must be used with either begin_or_end or date_str, or both"
+                )
             # No date in search results, return max/min date
             if begin_or_end not in VALID_DATE_TYPES:
                 raise ValueError(f"Invalid begin_or_end value: {begin_or_end}")
-            elif begin_or_end == 'begin':
+            elif begin_or_end == "begin":
                 date = datetime.datetime(year=1, month=1, day=1)
-            elif begin_or_end == 'end':
+            elif begin_or_end == "end":
                 date = datetime.datetime(year=9999, month=12, day=31)
 
         # Date found in search results
@@ -69,7 +75,7 @@ class Util:
     @staticmethod
     def today() -> str:
         """Returns current day formatted as YYYY-MM-DD string"""
-        return datetime.datetime.today().strftime('%Y-%m-%d')
+        return datetime.datetime.today().strftime("%Y-%m-%d")
 
     @staticmethod
     def get_image_type_from_url(url: str) -> str:
@@ -90,7 +96,10 @@ class Util:
         """
         # List of supported image extensions
         extensions = {
-            '.jpg', '.jpeg', '.png', '.webp',
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".webp",
         }
 
         url = url.lower()
@@ -98,7 +107,7 @@ class Util:
             if ext in url:
                 return ext
 
-        raise ValueError(f'ERROR: No supported image type found in URL: {url}')
+        raise ValueError(f"ERROR: No supported image type found in URL: {url}")
 
     @staticmethod
     def get_image_type_from_bytes(bytestr: bytes) -> str:
@@ -121,36 +130,42 @@ class Util:
         if len(bytestr) < 8:
             raise ValueError("bytestr must be at least 8 bytes.")
         if bytestr.startswith(JPEG_HEADER):
-            return '.jpg'
+            return ".jpg"
         if bytestr.startswith(PNG_HEADER):
-            return '.png'
+            return ".png"
         else:
-            raise ValueError(f"Unsupported file type (signature: {bytestr[:8].hex()}). Supported types: jpg, png")
+            raise ValueError(
+                f"Unsupported file type (signature: {bytestr[:8].hex()}). Supported types: jpg, png"
+            )
 
     @staticmethod
     def get_image(
-            item_type: str,
-            item_id: str | int,
-            mbid: str = None,
-            release_name: str = None,
-            artist_name: str = None,
-            label_name: str = None,
-            url: str = None,
+        item_type: str,
+        item_id: str | int,
+        mbid: str = None,
+        release_name: str = None,
+        artist_name: str = None,
+        label_name: str = None,
+        url: str = None,
     ):
         # TODO: refactor
         if url:
             # if we are provided the url, just grab it, don't check APIs
             import requests
-            response = requests.get(url, headers={
-                "User-Agent": f"databass/{VERSION} (https://github.com/chunned/databass)"
-            })
+
+            response = requests.get(
+                url,
+                headers={
+                    "User-Agent": f"databass/{VERSION} (https://github.com/chunned/databass)"
+                },
+            )
             if response:
                 ext = Util.get_image_type_from_url(url)
-                base_path = './databass/static/img'
-                img_filepath = base_path + '/release/' + str(item_id) + ext
-                with open(img_filepath, 'wb') as img_file:
+                base_path = "./databass/static/img"
+                img_filepath = base_path + f"/{item_type}/" + str(item_id) + ext
+                with open(img_filepath, "wb") as img_file:
                     img_file.write(response.content)
-                return img_filepath.replace('databass/', '')
+                return img_filepath.replace("databass/", "")
         img = img_type = img_url = None
         base_path = "./databass/static/img"
         subdir = item_type
@@ -158,18 +173,20 @@ class Util:
             # Create image subdirectory
             Path(f"{base_path}/{subdir}").mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            print(f'Encountered exception while creating directory: {e}')
+            print(f"Encountered exception while creating directory: {e}")
 
-        if item_type not in ['release', 'artist', 'label']:
-            raise Exception(f'Unexpected item_type: {item_type}')
+        if item_type not in ["release", "artist", "label"]:
+            raise Exception(f"Unexpected item_type: {item_type}")
 
         from .discogs import Discogs
 
-        if mbid is not None and item_type == 'release':
-            print(f'Item is a release and MBID is populated; attempting to fetch image from CoverArtArchive: {mbid}')
+        if mbid is not None and item_type == "release":
+            print(
+                f"Item is a release and MBID is populated; attempting to fetch image from CoverArtArchive: {mbid}"
+            )
             from .musicbrainz import MusicBrainz
-            try:
 
+            try:
                 # Number of seconds to wait before raising a TimeoutException
                 timeout_duration = 5
                 signal.signal(signal.SIGALRM, timeout_handler)
@@ -177,55 +194,54 @@ class Util:
 
                 img = MusicBrainz.get_image(mbid)
                 if img is not None:
-                    print('CoverArtArchive image found')
+                    print("CoverArtArchive image found")
                     # CAA returns the raw image data
                     img_type = Util.get_image_type_from_bytes(img)
                 else:
-                    raise ValueError('No image returned by CoverArtArchive, or an error was encountered when fetching the image.')
+                    raise ValueError(
+                        "No image returned by CoverArtArchive, or an error was encountered when fetching the image."
+                    )
             except Exception:
-                print('Image not found on CAA, checking Discogs')
+                print("Image not found on CAA, checking Discogs")
                 try:
                     img_url = Discogs.get_release_image_url(
-                        name=release_name,
-                        artist=artist_name
+                        name=release_name, artist=artist_name
                     )
                 except Exception as e:
-                    print(f'Got an exception from Discogs: {e}')
+                    print(f"Got an exception from Discogs: {e}")
         else:
-            print(f'Attempting to fetch {item_type} image from Discogs')
-            if item_type == 'artist':
+            print(f"Attempting to fetch {item_type} image from Discogs")
+            if item_type == "artist":
                 img_url = Discogs.get_artist_image_url(name=artist_name)
-            elif item_type == 'label':
+            elif item_type == "label":
                 img_url = Discogs.get_label_image_url(name=label_name)
-        response = ''
+        response = ""
         if img_url is not None and img_url is not False:
             import requests
-            print(f'Discogs image URL: {img_url}')
+
+            print(f"Discogs image URL: {img_url}")
             response = requests.get(
                 img_url,
                 headers={
                     "Accept": "application/json",
-                    "User-Agent": f"databass/{VERSION} (https://github.com/chunned/databass)"
+                    "User-Agent": f"databass/{VERSION} (https://github.com/chunned/databass)",
                 },
-                timeout=60
+                timeout=60,
             )
             img = response.content
             img_type = Util.get_image_type_from_bytes(img)
 
         if img is not None and img_type is not None:
             file_name = str(item_id) + img_type
-            file_path = base_path + '/' + subdir + '/' + file_name
-            with open(file_path, 'wb') as img_file:
+            file_path = base_path + "/" + subdir + "/" + file_name
+            with open(file_path, "wb") as img_file:
                 img_file.write(img)
-            print(f'Image saved to {file_path}')
-            return file_path.replace('databass/', '')
-        print(f'Discogs response: {response}')
+            print(f"Image saved to {file_path}")
+            return file_path.replace("databass/", "")
+        print(f"Discogs response: {response}")
 
     @staticmethod
-    def img_exists(
-            item_id: int,
-            item_type: str
-    ) -> Optional[str]:
+    def img_exists(item_id: int, item_type: str) -> Optional[str]:
         """
         Check if a local image exists for the given entity.
 
@@ -250,11 +266,13 @@ class Util:
 
         item_type = item_type.lower()
         if item_type not in VALID_TYPES:
-            raise ValueError(f"Invalid item_type: {item_type}. "
-                         f"Must be one of the following strings: {', '.join(VALID_TYPES)}")
+            raise ValueError(
+                f"Invalid item_type: {item_type}. "
+                f"Must be one of the following strings: {', '.join(VALID_TYPES)}"
+            )
 
         base_path = Path("static/img")
         result = list(base_path.joinpath(item_type).glob(f"{item_id}.*"))
         if result:
-            url = '/' + str(result[0]).replace('databass/', '')
+            url = "/" + str(result[0]).replace("databass/", "")
             return url
