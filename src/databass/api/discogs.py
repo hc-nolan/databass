@@ -109,11 +109,13 @@ class Discogs:
                 result_title = result.get("title")
                 # remove disambiguation chars
                 # e.g. "Future (4)" -> "Future"
+                if result_title is None:
+                    continue
                 result_title = re.sub(r"\s*\(\d+\)\s*$", "", result_title.strip())
                 if result_title == name:
                     try:
                         format = result.get("format")
-                        if format == "Blu-ray":
+                        if "Blu-ray" in format:
                             pass
                         else:
                             item_id = result.get("id")
