@@ -17,35 +17,31 @@ class MusicBrainz:
     @classmethod
     def initialize(cls):
         if not cls.init:
-            mbz.set_useragent('Databass', f'v{VERSION}', contact='https://github.com/chunned/databass')
+            mbz.set_useragent(
+                "Databass", f"v{VERSION}", contact="https://github.com/chunned/databass"
+            )
             cls.init = True
 
     @staticmethod
     def release_search(
-            release: str = None,
-            artist: str = None,
-            label: str = None
+        release: str = None, artist: str = None, label: str = None
     ) -> Optional[list[ReleaseInfo]]:
         """
-            Performs a search for music releases on the MusicBrainz API.
+        Performs a search for music releases on the MusicBrainz API.
 
-            Args:
-                release (str, optional): The release name to search for.
-                artist (str, optional): The artist name to search for.
-                label (str, optional): The label name to search for.
+        Args:
+            release (str, optional): The release name to search for.
+            artist (str, optional): The artist name to search for.
+            label (str, optional): The label name to search for.
 
-            Returns:
-                Optional[list[ReleaseInfo]]: A list of `ReleaseInfo` objects representing the search results, or `None` if no results were found.
-            """
+        Returns:
+            Optional[list[ReleaseInfo]]: A list of `ReleaseInfo` objects representing the search results, or `None` if no results were found.
+        """
         if MusicBrainz.init:
             if all(search_term is None for search_term in (release, artist, label)):
                 raise ValueError("At least one query term is required")
-            results = mbz.search_releases(
-                artist=artist,
-                label=label,
-                release=release
-            )
-            search_data = []        # Will hold the main return data
+            results = mbz.search_releases(artist=artist, label=label, release=release)
+            search_data = []  # Will hold the main return data
             for r in results["release-list"]:
                 # Parse label data
                 try:
@@ -62,10 +58,7 @@ class MusicBrainz:
                     # No label info found; continue with empty label data
                     label_id = ""
                     label_name = ""
-                label = {
-                    "mbid": label_id,
-                    "name": label_name
-                }
+                label = {"mbid": label_id, "name": label_name}
                 try:
                     raw_date = r["date"]
                     date = dateparser.parse(raw_date, fuzzy=True).year
@@ -94,13 +87,10 @@ class MusicBrainz:
                 release_id = r["id"]
 
                 rel = ReleaseInfo(
-                    release={
-                        "name": r["title"],
-                        "mbid": release_id
-                    },
+                    release={"name": r["title"], "mbid": release_id},
                     artist={
                         "name": r["artist-credit"][0]["name"],
-                        "mbid": r["artist-credit"][0]["artist"]["id"]
+                        "mbid": r["artist-credit"][0]["artist"]["id"],
                     },
                     label=label,
                     date=date,
@@ -135,7 +125,9 @@ class MusicBrainz:
             if mbid is not None:
                 try:
                     # If we have MBID, we can query the label directly
-                    label_result = mbz.get_label_by_id(mbid, includes=['area-rels'])["label"]
+                    label_result = mbz.get_label_by_id(mbid, includes=["area-rels"])[
+                        "label"
+                    ]
                     label = MusicBrainz.parse_search_result(label_result)
                     return label
                 except Exception as e:
@@ -176,7 +168,9 @@ class MusicBrainz:
             if mbid is not None:
                 try:
                     # If we have MBID, we can query the label directly
-                    artist_result = mbz.get_artist_by_id(mbid, includes=['area-rels'])["artist"]
+                    artist_result = mbz.get_artist_by_id(mbid, includes=["area-rels"])[
+                        "artist"
+                    ]
                     artist = MusicBrainz.parse_search_result(artist_result)
                     return artist
                 except KeyError:
@@ -229,8 +223,8 @@ class MusicBrainz:
         except KeyError:
             end_raw = None
             # Parse from string to datetime
-        begin = Util.to_date('begin', begin_raw)
-        end = Util.to_date('end', end_raw)
+        begin = Util.to_date("begin", begin_raw)
+        end = Util.to_date("end", end_raw)
 
         try:
             country = search_result["country"]
@@ -265,33 +259,34 @@ class MusicBrainz:
         """
         if not mbid or not isinstance(mbid, str):
             return 0
-        if MusicBrainz.init:
-            try:
-                release_data = mbz.get_release_by_id(mbid,
-                                                     includes=["recordings", "media", "recording-level-rels"])
-                tracks = [
-                    track
-                    for disc in release_data["release"]["medium-list"]
-                    for track in disc["track-list"]
-                ]
-                length = 0
-                for track in tracks:
-                    try:
-                        length += int(track["length"])
-                    except (KeyError, TypeError):
-                        pass
-                    return length
-            except Exception:
-                return 0
-        else:
+        if not MusicBrainz.init:
             try:
                 MusicBrainz.initialize()
-                return MusicBrainz.get_release_length(mbid)
             except RecursionError:
                 return 0
 
+        try:
+            release_data = mbz.get_release_by_id(
+                mbid, includes=["recordings", "media", "recording-level-rels"]
+            )
+            tracks = [
+                track
+                for disc in release_data["release"]["medium-list"]
+                for track in disc["track-list"]
+            ]
+            length = 0
+            for track in tracks:
+                try:
+                    length += int(track["length"])
+                except (KeyError, TypeError):
+                    pass
+
+            return length
+        except Exception:
+            return 0
+
     @staticmethod
-    def get_image(mbid: str, size: str = '250') -> Optional[bytes]:
+    def get_image(mbid: str, size: str = "250") -> Optional[bytes]:
         """
         Search for the front cover image of a release group on MusicBrainz and return it as bytes, or return None if no image is found.
 
@@ -313,7 +308,7 @@ class MusicBrainz:
                 covers: Dict[str, Any] = mbz.get_image_list(mbid)
                 if covers:
                     try:
-                        coverid = covers['images'][0]['id']
+                        coverid = covers["images"][0]["id"]
                         return mbz.get_image(mbid, coverid=coverid, size=size)
                     except (KeyError, IndexError):
                         pass
