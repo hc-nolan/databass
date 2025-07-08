@@ -28,6 +28,73 @@ from .db.util import get_all_stats, handle_submit_data
 from .pagination import Pager
 
 
+def get_manual_release_data(data) -> dict:
+    """
+    Parses search form data for release information that was manually submitted
+    """
+    genres = data.get("genres")
+    image = data.get("image")
+    runtime_ms = data.get("runtime")
+    try:
+        runtime = int(runtime_ms) * 60000
+    except ValueError:
+        runtime = 0
+
+    track_count = data.get("track_count")
+    try:
+        track_count = int(track_count)
+    except ValueError:
+        track_count = 0
+
+    country = country_code(data.get("country"))
+
+    return {
+        "name": data.get("name"),
+        "mbid": None,
+        "artist_name": data.get("artist"),
+        "artist_mbid": None,
+        "label_name": data.get("label"),
+        "label_mbid": None,
+        "year": data.get("year"),
+        "main_genre": data.get("main_genre"),
+        "rating": data.get("rating"),
+        "genres": genres,
+        "image": image,
+        "listen_date": Util.today(),
+        "runtime": runtime,
+        "track_count": track_count,
+        "country": country,
+        "release_group_mbid": None,
+    }
+
+
+def get_release_data(data) -> dict:
+    """
+    Parses search form data for release information returned by MusicBrainz
+    """
+    year = data.get("year")
+    if year is None:
+        year = 0
+
+    return {
+        "release_group_mbid": data.get("release_group_id"),
+        "name": data.get("release_name"),
+        "mbid": data.get("release_mbid"),
+        "artist_name": data.get("artist"),
+        "artist_mbid": data.get("artist_mbid"),
+        "label_name": data.get("label"),
+        "label_mbid": data.get("label_mbid"),
+        "year": int(year),
+        "main_genre": data.get("main_genre"),
+        "rating": int(data.get("rating")),
+        "track_count": data.get("track_count"),
+        "listen_date": Util.today(),
+        "country": data.get("country"),
+        "genres": data.get("genres"),
+        "image": None,
+    }
+
+
 def register_routes(app):
     @app.route("/", methods=["GET"])
     @app.route("/home", methods=["GET"])
@@ -124,83 +191,19 @@ def register_routes(app):
     @app.route("/submit", methods=["POST"])
     def submit():
         data = request.form.to_dict()
+        release_data = {}
+        match data.get("manual_submit"):
+            case "true":
+                release_data = get_manual_release_data(data)
+            case "false":
+                release_data = get_release_data(data)
+
         try:
-            release_data = {}
-            # Check if this is a manual submission
-            if data["manual_submit"] == "true":
-                # try to grab optional fields
-                try:
-                    genres = data["genres"]
-                except KeyError:
-                    genres = []
-                try:
-                    image = data["image"]
-                except KeyError:
-                    image = ""
-
-                try:
-                    # convert minutes to ms
-                    runtime = int(data["runtime"]) * 60000
-                except (KeyError, ValueError):
-                    runtime = 0
-
-                try:
-                    track_count = int(data["track_count"])
-                except (KeyError, ValueError):
-                    track_count = 0
-
-                try:
-                    country = country_code(data["country"])
-                except KeyError:
-                    country = "?"
-
-                release_data = {
-                    "name": data["name"],
-                    "mbid": None,
-                    "artist_name": data["artist"],
-                    "artist_mbid": None,
-                    "label_name": data["label"],
-                    "label_mbid": None,
-                    "year": data["year"],
-                    "main_genre": data["main_genre"],
-                    "rating": data["rating"],
-                    "genres": genres,
-                    "image": image,
-                    "listen_date": Util.today(),
-                    "runtime": runtime,
-                    "track_count": track_count,
-                    "country": country,
-                    "release_group_mbid": None,
-                }
-            elif data["manual_submit"] == "false":
-                # Grab variables from request
-                release_data = {
-                    "release_group_mbid": data["release_group_id"],
-                    "name": data["release_name"],
-                    "mbid": data["release_mbid"],
-                    "artist_name": data["artist"],
-                    "artist_mbid": data["artist_mbid"],
-                    "label_name": data["label"],
-                    "label_mbid": data["label_mbid"],
-                    "year": int(data["year"]),
-                    "main_genre": data["main_genre"],
-                    "rating": int(data["rating"]),
-                    "track_count": data["track_count"],
-                    "listen_date": Util.today(),
-                    "country": data["country"],
-                    "genres": data["genres"],
-                    "image": None,
-                }
-
-            try:
-                handle_submit_data(release_data)
-            except IntegrityError as err:
-                flash(str(err))
-                return redirect("/error")
-        except KeyError as err:
-            error = f"Request missing one of the expected keys: {err}"
-            flash(error)
+            handle_submit_data(release_data)
+        except IntegrityError as err:
+            flash(str(err))
             return redirect("/error")
+
         return redirect("/", code=302)
 
     @app.route("/stats", methods=["GET"])
@@ -400,7 +403,7 @@ def register_routes(app):
         If country is `None` or not found in `pycountry`, original value is returned.
         """
         if country is None:
-            return country
+            return "?"
         try:
             code = pycountry.countries.lookup(country)
             return code.alpha_2 if code else None
