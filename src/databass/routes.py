@@ -267,30 +267,24 @@ def register_routes(app):
 
     @app.route("/img/<string:itemtype>/<int:itemid>", methods=["GET"])
     def serve_image(itemtype: str, itemid: int):
-        item = ""
-        if itemtype == "artist":
-            item = models.Artist.exists_by_id(itemid)
-        if itemtype == "label":
-            item = models.Label.exists_by_id(itemid)
-        if itemtype == "release":
-            item = models.Release.exists_by_id(itemid)
-
-        try:
-            img_dir = abspath(join("databass", "static", "img", itemtype))
-            img_pattern = join(img_dir, f"{item.id}.*")
-            match = glob(img_pattern)
-            if match:
-                img_path = match[0]
-            else:
-                img_path = "./static/img/none.png"
-        except KeyError:
+        match itemtype:
+            case "artist":
+                item = models.Artist.exists_by_id(itemid)
+            case "label":
+                item = models.Label.exists_by_id(itemid)
+            case "release":
+                item = models.Release.exists_by_id(itemid)
+            case _:
+                return
+        img_dir = abspath(join("databass", "static", "img", itemtype))
+        img_pattern = join(img_dir, f"{item.id}.*")
+        img_match = glob(img_pattern)
+        if img_match:
+            img_path = img_match[0]
+        else:
             img_path = "./static/img/none.png"
-        try:
-            resp = make_response(send_file(img_path))
-        except TypeError:
-            img_path = "./static/img/none.png"
-            resp = make_response(send_file(img_path))
-        resp.headers["Cache-Control"] = "max-age"
+        resp = make_response(send_file(img_path))
+        resp.headers["Cache-Control"] = "max-age=600"
         return resp
 
     # TODO: see if still needed
