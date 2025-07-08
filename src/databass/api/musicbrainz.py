@@ -294,18 +294,23 @@ class MusicBrainz:
             return None
         if not mbid or not isinstance(mbid, str):
             return None
+
         try:
             return mbz.get_release_group_image_front(mbid, size=size)
         except musicbrainzngs.musicbrainz.ResponseError:
             try:
                 covers: Dict[str, Any] = mbz.get_image_list(mbid)
+
                 if covers:
+                    imgs = covers.get("images")
+
                     try:
-                        coverid = covers["images"][0]["id"]
+                        coverid = imgs[0]["id"]
                         return mbz.get_image(mbid, coverid=coverid, size=size)
-                    except (KeyError, IndexError):
-                        pass
+                    except (TypeError, IndexError):
+                        return None
+
             except musicbrainzngs.musicbrainz.ResponseError:
                 return None
-        except Exception:
-            return None
+
+        return None
