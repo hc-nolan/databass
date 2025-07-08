@@ -185,34 +185,23 @@ class MusicBrainz:
         """
         if not name or not isinstance(name, str):
             return None
-        if MusicBrainz.init:
-            if mbid is not None:
-                try:
-                    # If we have MBID, we can query the label directly
-                    artist_result = mbz.get_artist_by_id(mbid, includes=["area-rels"])[
-                        "artist"
-                    ]
-                    artist = MusicBrainz.parse_search_result(artist_result)
-                    return artist
-                except KeyError:
-                    return None
-            else:
-                # No MBID, have to search. Assume first result is correct
-                artist_results = mbz.search_artists(query=name)
-                try:
-                    artist_id = artist_results["artist-list"][0]["id"]
-                    # Now that we have an MBID, recursively call this function using that ID to grab the label data
-                    # This call is required because begin_date/end_date are not included in search results
-                    return MusicBrainz.artist_search(name=name, mbid=artist_id)
-                except (KeyError, IndexError):
-                    return None
-        else:
-            # MusicBrainz class not initialized; call initialize function, then re-call function
-            try:
-                MusicBrainz.initialize()
-                return MusicBrainz.artist_search(name, mbid)
-            except RecursionError:
-                return None
+        if not MusicBrainz.init:
+            MusicBrainz.initialize()
+        if mbid is not None:
+            # If we have MBID, we can query the label directly
+            artist_result = mbz.get_artist_by_id(mbid, includes=["area-rels"])["artist"]
+            artist = MusicBrainz.parse_search_result(artist_result)
+            return artist
+        # No MBID, have to search. Assume first result is correct
+        artist_results = mbz.search_artists(query=name)
+        artist_list = artist_results.get("artist-list")
+        try:
+            artist_id = artist_list[0]["id"]
+            # Now that we have a MBID, call this function using that ID
+            # This call is required because begin_date/end_date are not included in search results
+            return MusicBrainz.artist_search(name=name, mbid=artist_id)
+        except (TypeError, IndexError):
+            return None
 
     @staticmethod
     def parse_search_result(search_result: SearchResult) -> EntityInfo:
