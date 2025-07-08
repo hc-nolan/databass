@@ -5,11 +5,20 @@ Implements the main routes for the databass application, including
 - stats page
 - goals page
 """
+
 from datetime import datetime
 from os.path import join, abspath
 from glob import glob
 import flask
-from flask import render_template, request, redirect, abort, flash, make_response, send_file
+from flask import (
+    render_template,
+    request,
+    redirect,
+    abort,
+    flash,
+    make_response,
+    send_file,
+)
 from sqlalchemy.exc import IntegrityError
 import pycountry
 from .api import Util, MusicBrainz
@@ -20,22 +29,21 @@ from .pagination import Pager
 
 
 def register_routes(app):
-    @app.route('/', methods=['GET'])
-    @app.route('/home', methods=['GET'])
+    @app.route("/", methods=["GET"])
+    @app.route("/home", methods=["GET"])
     def home() -> str:
         stats_data = get_all_stats()
         active_goals = models.Goal.get_incomplete()
+        goal_data = []
         if active_goals is not None:
             goal_data = [process_goal_data(goal) for goal in active_goals]
-        else:
-            goal_data = []
         year = datetime.now().year
         return render_template(
-            'index.html',
+            "index.html",
             stats=stats_data,
             goals=goal_data,
             year=year,
-            active_page='home'
+            active_page="home",
         )
 
     @app.route("/home_release_table")
@@ -44,20 +52,18 @@ def register_routes(app):
 
         page = Pager.get_page_param(request)
         paged_data, flask_pagination = Pager.paginate(
-            per_page=5,
-            current_page=page,
-            data=data
+            per_page=5, current_page=page, data=data
         )
 
         return render_template(
-            'home_release_table.html',
+            "home_release_table.html",
             data=paged_data,
             pagination=flask_pagination,
         )
 
     @app.route("/new")
     def new():
-        return render_template("new.html", active_page='new')
+        return render_template("new.html", active_page="new")
 
     @app.route("/search", methods=["POST", "GET"])
     def search() -> str | flask.Response:
@@ -70,52 +76,41 @@ def register_routes(app):
                 data=paged_data,
                 pagination=None,
                 data_full=release_data,
-                per_page=per_page
+                per_page=per_page,
             )
 
         data = request.get_json()
-        try:
-            search_release = data["release"]
-            search_artist = data["artist"]
-            search_label = data["label"]
-        except KeyError:
-            error = "Request missing one of the expected keys"
-            flash(error)
-            # TODO: move this error handling into errors/routes.py
-            return redirect('/error')
+        search_release = data.get("release")
+        search_artist = data.get("artist")
+        search_label = data.get("label")
+
         if not search_release and not search_artist and not search_label:
             error = "ERROR: Search requires at least one search term"
             return error
-        release_data = MusicBrainz.release_search(release=search_release,
-                                                      artist=search_artist,
-                                                      label=search_label)
+
+        release_data = MusicBrainz.release_search(
+            release=search_release, artist=search_artist, label=search_label
+        )
         page = Pager.get_page_param(request)
-        if all(
-            var is not None for var in [page, release_data]
-        ):
-            paged_data, flask_pagination = Pager.paginate(
-                per_page=10,
-                current_page=page,
-                data=release_data
-            )
-            return render_template(
-                "search.html",
-                page=page,
-                data=paged_data,
-                pagination=flask_pagination,
-                data_full=release_data,
-                per_page=per_page
-            )
-        
+        paged_data, flask_pagination = Pager.paginate(
+            per_page=10, current_page=page, data=release_data
+        )
+        return render_template(
+            "search.html",
+            page=page,
+            data=paged_data,
+            pagination=flask_pagination,
+            data_full=release_data,
+            per_page=per_page,
+        )
+
     @app.route("/search_results", methods=["POST"])
     def search_results():
         data = request.get_json()
         per_page = 10
         page = Pager.get_page_param(request)
         paged_data, flask_pagination = Pager.paginate(
-            per_page=per_page,
-            current_page=page,
-            data=data
+            per_page=per_page, current_page=page, data=data
         )
         return render_template(
             "search.html",
@@ -123,7 +118,7 @@ def register_routes(app):
             data=paged_data,
             pagination=flask_pagination,
             data_full=data,
-            per_page=per_page
+            per_page=per_page,
         )
 
     @app.route("/submit", methods=["POST"])
@@ -175,7 +170,7 @@ def register_routes(app):
                     "runtime": runtime,
                     "track_count": track_count,
                     "country": country,
-                    "release_group_mbid": None
+                    "release_group_mbid": None,
                 }
             elif data["manual_submit"] == "false":
                 # Grab variables from request
@@ -194,26 +189,26 @@ def register_routes(app):
                     "listen_date": Util.today(),
                     "country": data["country"],
                     "genres": data["genres"],
-                    "image": None
+                    "image": None,
                 }
 
             try:
                 handle_submit_data(release_data)
             except IntegrityError as err:
                 flash(str(err))
-                return redirect('/error')
+                return redirect("/error")
         except KeyError as err:
             error = f"Request missing one of the expected keys: {err}"
             flash(error)
-            return redirect('/error')
+            return redirect("/error")
         return redirect("/", code=302)
 
-    @app.route('/stats', methods=['GET'])
+    @app.route("/stats", methods=["GET"])
     def stats():
         statistics = get_all_stats()
-        return render_template('stats.html', data=statistics, active_page='stats')
+        return render_template("stats.html", data=statistics, active_page="stats")
 
-    @app.route('/stats/get/<string:stats_type>', methods=['GET'])
+    @app.route("/stats/get/<string:stats_type>", methods=["GET"])
     def stats_get(stats_type):
         statistics = get_all_stats()
         data = ""
@@ -221,58 +216,54 @@ def register_routes(app):
             data = {
                 "most_frequent": statistics["top_frequent_labels"],
                 "highest_average": statistics["top_average_labels"],
-                "favourite": statistics["top_rated_labels"]
+                "favourite": statistics["top_rated_labels"],
             }
         if stats_type == "artists":
             data = {
                 "most_frequent": statistics["top_frequent_artists"],
                 "highest_average": statistics["top_average_artists"],
-                "favourite": statistics["top_rated_artists"]
+                "favourite": statistics["top_rated_artists"],
             }
-        return render_template('stats_data.html', type=stats_type, stats=data)
+        return render_template("stats_data.html", type=stats_type, stats=data)
 
-
-    @app.route('/goals', methods=['GET'])
+    @app.route("/goals", methods=["GET"])
     def goals():
-        if request.method != 'GET':
+        if request.method != "GET":
             abort(405)
         existing_goals = models.Goal.get_incomplete()
         if existing_goals is None:
             existing_goals = []
-        data = {
-            "today": Util.today(),
-            "existing_goals": existing_goals
-        }
-        return render_template('goals.html', active_page='goals', data=data)
+        data = {"today": Util.today(), "existing_goals": existing_goals}
+        return render_template("goals.html", active_page="goals", data=data)
 
-    @app.route('/add_goal', methods=['POST'])
+    @app.route("/add_goal", methods=["POST"])
     def add_goal():
         data = request.form.to_dict()
         if not data:
             error = "/add_goal received an empty payload"
             # TODO: move this error handling into errors/routes.py
             flash(error)
-            return redirect('/error')
+            return redirect("/error")
         try:
-            goal = db.construct_item(model_name='goal', data_dict=data)
+            goal = db.construct_item(model_name="goal", data_dict=data)
             if not goal:
                 raise NameError("Construction of Goal object failed")
         except Exception as e:
             # TODO: move this error handling into errors/routes.py
             flash(str(e))
-            return redirect('/error')
+            return redirect("/error")
 
         db.insert(goal)
-        return redirect('/goals', 302)
+        return redirect("/goals", 302)
 
-    @app.route('/img/<string:itemtype>/<int:itemid>', methods=['GET'])
+    @app.route("/img/<string:itemtype>/<int:itemid>", methods=["GET"])
     def serve_image(itemtype: str, itemid: int):
-        item = ''
-        if itemtype == 'artist':
+        item = ""
+        if itemtype == "artist":
             item = models.Artist.exists_by_id(itemid)
-        if itemtype == 'label':
+        if itemtype == "label":
             item = models.Label.exists_by_id(itemid)
-        if itemtype == 'release':
+        if itemtype == "release":
             item = models.Release.exists_by_id(itemid)
 
         try:
@@ -290,42 +281,41 @@ def register_routes(app):
         except TypeError:
             img_path = "./static/img/none.png"
             resp = make_response(send_file(img_path))
-        resp.headers['Cache-Control'] = 'max-age'
+        resp.headers["Cache-Control"] = "max-age"
         return resp
 
     # TODO: see if still needed
-    @app.route('/stats_search', methods=['GET'])
+    @app.route("/stats_search", methods=["GET"])
     def stats_search():
         data = request.get_json()
         sort = data["sort"]
         metric = data["metric"]
         item_type = data["item_type"]
         item_property = data["item_property"]
-        stats.search(sort=sort,
-                     metric=metric,
-                     item_type=item_type,
-                     item_property=item_property)
+        stats.search(
+            sort=sort, metric=metric, item_type=item_type, item_property=item_property
+        )
 
     # TODO: see if still needed
-    @app.route('/imgupdate/<item_type>/<item_id>')
+    @app.route("/imgupdate/<item_type>/<item_id>")
     def imgupdate(item_type, item_id):
-        print(f'Checking: {item_type} {item_id}')
+        print(f"Checking: {item_type} {item_id}")
         item_id = int(item_id)
-        if item_type == 'release':
+        if item_type == "release":
             item = models.Release.exists_by_id(item_id)
-        elif item_type == 'artist':
+        elif item_type == "artist":
             item = models.Artist.exists_by_id(item_id)
-        elif item_type == 'label':
+        elif item_type == "label":
             item = models.Label.exists_by_id(item_id)
         else:
             raise ValueError(f"Unexpected item_type: {item_type}")
         try:
-            img_path = '.' + Util.img_exists(item_id=item_id, item_type=item_type)
-            print(f'Local image already exists: {img_path}')
+            img_path = "." + Util.img_exists(item_id=item_id, item_type=item_type)
+            print(f"Local image already exists: {img_path}")
         except TypeError:
-            print('Local image not found, attempting to grab from external sources.')
+            print("Local image not found, attempting to grab from external sources.")
             # No local image exists, grab it
-            if item_type == 'release':
+            if item_type == "release":
                 release_name = item.name
                 release_artist = models.Artist.exists_by_id(item.artist_id)
                 artist_name = release_artist.name
@@ -334,62 +324,55 @@ def register_routes(app):
                     item_id=item_id,
                     mbid=item.mbid,
                     release_name=release_name,
-                    artist_name=artist_name
+                    artist_name=artist_name,
                 )
-            elif item_type == 'artist':
+            elif item_type == "artist":
                 artist_name = item.name
                 img_path = Util.get_image(
                     item_type=item_type,
                     item_id=item_id,
                     mbid=item.mbid,
-                    artist_name=artist_name
+                    artist_name=artist_name,
                 )
-            elif item_type == 'label':
+            elif item_type == "label":
                 label_name = item.name
                 img_path = Util.get_image(
                     item_type=item_type,
                     item_id=item_id,
                     mbid=item.mbid,
-                    label_name=label_name
+                    label_name=label_name,
                 )
         if item.image != img_path:
             item.image = img_path
-            print(f'Updating database entry: {item_type}.image => {img_path}')
+            print(f"Updating database entry: {item_type}.image => {img_path}")
             db.update(item)
         # Define the mappings for the order of items.
         # All releases are fixed 1 by 1, then artists, then labels
-        next_type = {
-            'release': 'artist',
-            'artist': 'label',
-            'label': None
-        }
+        next_type = {"release": "artist", "artist": "label", "label": None}
         next_item = db.util.next_item(item_type=item_type, prev_id=item_id)
         if next_item:
-            return redirect(f'/imgupdate/{item_type}/{next_item.id}')
+            return redirect(f"/imgupdate/{item_type}/{next_item.id}")
 
         # No next item; move onto next item type
         next_item = next_type.get(item_type)
         if next_item:
-            return redirect(f'/imgupdate/{next_item}/0')
+            return redirect(f"/imgupdate/{next_item}/0")
         # Complete, redirect to home
-        return redirect('/', code=302)
+        return redirect("/", code=302)
 
     # TODO: see if still needed
-    @app.route('/fix_images')
+    @app.route("/fix_images")
     def fix_images():
-        print('Fixing images.')
+        print("Fixing images.")
         # Starts the imgupdate process; recursively calls itself and update all images 1 by 1
-        return redirect('/imgupdate/release/1')
+        return redirect("/imgupdate/release/1")
 
-    @app.route('/new_release', methods=["POST"])
+    @app.route("/new_release", methods=["POST"])
     def new_release_popup():
         data = request.get_json()
-        return render_template(
-            "new_release_popup.html",
-            data=data
-        )
+        return render_template("new_release_popup.html", data=data)
 
-    @app.template_filter('country_name')
+    @app.template_filter("country_name")
     def country_name(code: str) -> str | None:
         """
         Converts a two-letter country code to the full country name.
@@ -410,7 +393,7 @@ def register_routes(app):
         except KeyError:
             return code
 
-    @app.template_filter('country_code')
+    @app.template_filter("country_code")
     def country_code(country: str) -> str | None:
         """
         Converts a country string to the corresponding two-letter country code
@@ -423,6 +406,7 @@ def register_routes(app):
             return code.alpha_2 if code else None
         except (KeyError, LookupError):
             return country
+
 
 def process_goal_data(goal: models.Goal):
     """
@@ -456,5 +440,5 @@ def process_goal_data(goal: models.Goal):
         "amount": goal.amount,
         "progress": round((current / goal.amount) * 100),
         "target": target,
-        "current": current
+        "current": current,
     }
