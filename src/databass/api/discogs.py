@@ -184,26 +184,21 @@ class Discogs:
             or not isinstance(search_results["images"], list)
         ):
             return None
+        imgs = search_results.get("images")
+        print(f"{len(imgs)} candidates found")
+        for image in imgs:
+            img_url = image.get("url")
+            height = image.get("height")
+            width = image.get("width")
+            if height == width:
+                print(f"Square image found: {img_url}")
+                return img_url
+            print(f"Non-square image: H:{height}/W:{width} | {img_url}")
+
+        print("No square images found. Returning first image result")
         try:
-            print(f"{len(search_results['images'])} candidates found")
-            for image in search_results["images"]:
-                image_url = image["uri"]
-                try:
-                    height = image["height"]
-                    width = image["width"]
-                    # Make sure image is square; if not, try next result
-                    if height == width:
-                        print(f"Square image found: {image_url}")
-                        return image_url
-                    print(f"Non-square image: H:{height}/W:{width} | {image_url}")
-                except KeyError:
-                    pass
-            try:
-                print("No square images found. Returning first image result")
-                return search_results["images"][0]["uri"]
-            except IndexError:
-                return None
-        except KeyError:
+            return imgs[0].get("uri")
+        except IndexError:
             print("No images found in search results.")
             return None
 
