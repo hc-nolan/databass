@@ -178,7 +178,7 @@ class MusicBrainz:
         return search_data
 
     @staticmethod
-    def label_search(name: str, mbid: str = None) -> Optional[LabelInfo]:
+    def label_search(name: str, mbid: Optional[str] = None) -> Optional[LabelInfo]:
         """
         Search MusicBrainz for a label matching the given name or MusicBrainz ID (MBID).
 
@@ -212,7 +212,7 @@ class MusicBrainz:
             return None
 
     @staticmethod
-    def artist_search(name: str, mbid: str = None) -> Optional[ArtistInfo]:
+    def artist_search(name: str, mbid: Optional[str] = None) -> Optional[ArtistInfo]:
         """
         Search MusicBrainz for artists matching the search terms.
 

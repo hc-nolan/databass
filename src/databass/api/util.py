@@ -54,9 +54,7 @@ class Util:
                 )
 
     @staticmethod
-    def to_date(
-        begin_or_end: Optional[Literal["begin", "end"]], date_str: Optional[str]
-    ) -> datetime.date:
+    def to_date(begin_or_end: Optional[str], date_str: Optional[str]) -> datetime.date:
         """
         Convert a date string to a datetime.date object.
         If the date string is empty, will default to either 0001/01/01 (begin) or
