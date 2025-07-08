@@ -27,50 +27,49 @@ def timeout_handler(signum, frame):
     raise TimeoutException("Request timed out")
 
 
-# Collection of generic utility functions used by other parts of the app
 class Util:
+    """
+    Collection of generic utility functions used by other parts of the app
+    """
+
+    @staticmethod
+    def to_begin_or_end(option: str) -> datetime.date:
+        match option:
+            case "begin":
+                return datetime.datetime(year=1, month=1, day=1)
+            case "end":
+                return datetime.datetime(year=9999, month=12, day=31)
+            case _:
+                raise ValueError(
+                    f"Invalid option: {option} - should be 'begin' or 'end'"
+                )
+
     @staticmethod
     def to_date(
-        begin_or_end: Literal["begin", "end"] | None, date_str: str | None
+        begin_or_end: Optional[Literal["begin", "end"]], date_str: Optional[str]
     ) -> datetime.date:
         """
-        Convert a date string or begin/end indicator to a datetime.date object.
-
-        Args:
-            begin_or_end (Literal['begin', 'end'] | None): Indicates whether to return the earliest or latest possible date.
-            date_str (str | None): A date string in the format YYYY, YYYY-MM, or YYYY-MM-DD.
-
-        Returns:
-            datetime.date: The corresponding date object.
-
-        Raises:
-            ValueError: If `begin_or_end` is not 'begin' or 'end', or if `date_str` is in an unexpected format.
+        Convert a date string to a datetime.date object.
+        If the date string is empty, will default to either 0001/01/01 (begin) or
+        9999/12/31 (end)
         """
-        date = None
-        if not date_str:
-            if not begin_or_end:
-                raise ValueError(
-                    "Must be used with either begin_or_end or date_str, or both"
-                )
-            # No date in search results, return max/min date
-            if begin_or_end not in VALID_DATE_TYPES:
-                raise ValueError(f"Invalid begin_or_end value: {begin_or_end}")
-            elif begin_or_end == "begin":
-                date = datetime.datetime(year=1, month=1, day=1)
-            elif begin_or_end == "end":
-                date = datetime.datetime(year=9999, month=12, day=31)
+        if date_str is None and begin_or_end is None:
+            raise ValueError(
+                "Must be used with either begin_or_end or date_str, or both"
+            )
+        if date_str is None:
+            return Util.to_begin_or_end(begin_or_end)
+        match len(date_str):
+            case 4:
+                date = datetime.datetime.strptime(date_str, YEAR_FORMAT)
+            case 7:
+                date = datetime.datetime.strptime(date_str, MONTH_FORMAT)
+            case 10:
+                date = datetime.datetime.strptime(date_str, DAY_FORMAT)
+            case _:
+                raise ValueError(f"Unexpected date string format: {date_str}")
 
-        # Date found in search results
-        elif len(date_str) == 4:
-            date = datetime.datetime.strptime(date_str, YEAR_FORMAT)
-        elif len(date_str) == 7:
-            date = datetime.datetime.strptime(date_str, MONTH_FORMAT)
-        elif len(date_str) == 10:
-            date = datetime.datetime.strptime(date_str, DAY_FORMAT)
-
-        if date is not None:
-            return date.date()
-        raise ValueError(f"Unexpected date string format: {date_str}")
+        return date.date()
 
     @staticmethod
     def today() -> str:

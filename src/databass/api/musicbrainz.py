@@ -125,6 +125,7 @@ class MbzParser:
         begin_raw = lifespan.get("begin")
         end_raw = lifespan.get("end")
         begin = Util.to_date("begin", begin_raw)
+        begin = Util.to_date("begin", begin_raw)
         end = Util.to_date("end", end_raw)
 
         item = EntityInfo(
