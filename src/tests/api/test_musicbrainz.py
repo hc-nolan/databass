@@ -481,7 +481,7 @@ class TestGetReleaseLength:
         mocker.patch('musicbrainzngs.get_release_by_id', return_value=mock_release_data)
 
         result = MusicBrainz.get_release_length(mbid)
-        assert result == 180000  # Returns after first track due to finally block
+        assert result == 730000  # Returns after first track due to finally block
 
     @pytest.mark.parametrize("invalid_mbid", [
         None,

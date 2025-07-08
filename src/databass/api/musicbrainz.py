@@ -269,17 +269,17 @@ class MusicBrainz:
             release_data = mbz.get_release_by_id(
                 mbid, includes=["recordings", "media", "recording-level-rels"]
             )
-            tracks = [
-                track
-                for disc in release_data["release"]["medium-list"]
-                for track in disc["track-list"]
-            ]
+            track_data = release_data.get("release")
+            discs = track_data.get("medium-list")
             length = 0
-            for track in tracks:
-                try:
-                    length += int(track["length"])
-                except (KeyError, TypeError):
-                    pass
+            for disc in discs:
+                tracks = disc.get("track-list")
+                for track in tracks:
+                    try:
+                        track_len = track.get("length")
+                        length += int(track_len)
+                    except (KeyError, TypeError):
+                        pass
 
             return length
         except Exception:
