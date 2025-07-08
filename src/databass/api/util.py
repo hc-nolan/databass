@@ -18,6 +18,13 @@ YEAR_FORMAT = "%Y"
 MONTH_FORMAT = "%Y-%m"
 DAY_FORMAT = "%Y-%m-%d"
 
+SUPPORTED_EXTENSIONS = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+}
+
 
 class TimeoutException(Exception):
     pass
@@ -80,29 +87,9 @@ class Util:
     def get_image_type_from_url(url: str) -> str:
         """
         Determine the image file extension from the URL of an image file.
-
-        This function extracts the image format from a URL, supporting common web image formats
-        and handling various URL patterns. The extension can appear anywhere in the URL path.
-
-        Args:
-            url (str): The URL of an image file.
-
-        Returns:
-            str: The file extension of the image (e.g. '.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.tiff').
-
-        Raises:
-            ValueError: If no supported image extension is found in the URL.
         """
-        # List of supported image extensions
-        extensions = {
-            ".jpg",
-            ".jpeg",
-            ".png",
-            ".webp",
-        }
-
         url = url.lower()
-        for ext in extensions:
+        for ext in SUPPORTED_EXTENSIONS:
             if ext in url:
                 return ext
 
