@@ -98,6 +98,45 @@ class MbzParser:
             release_group_id=r.get("release-group")["id"],
         )
 
+    @staticmethod
+    def parse_search_result(search_result: SearchResult) -> EntityInfo:
+        """
+        Parse a search result from the MusicBrainz API into a dictionary with the following keys:
+        - name: The name of the item (e.g. label, artist)
+        - mbid: The MusicBrainz ID of the item
+        - begin: The start date of the item, as a datetime object or None if not available
+        - end: The end date of the item, as a datetime object or None if not available
+        - country: The country of the item, or None if not available
+        - type: The type of the item (e.g. "Label", "Artist"), or None if not available
+
+        Args:
+            search_result (dict): The raw search result dictionary from the MusicBrainz API.
+
+        Returns:
+            dict: A dictionary containing the parsed information about the item.
+        """
+        if not isinstance(search_result, dict) or not search_result:
+            raise ValueError("Invalid or empty search result passed to the function")
+
+        country = search_result.get("country")
+        item_type = search_result.get("type")
+        lifespan = search_result.get("life_span")
+
+        begin_raw = lifespan.get("begin")
+        end_raw = lifespan.get("end")
+        begin = Util.to_date("begin", begin_raw)
+        end = Util.to_date("end", end_raw)
+
+        item = EntityInfo(
+            name=search_result["name"],
+            mbid=search_result["id"],
+            begin=begin,
+            end=end,
+            country=country,
+            type=item_type,
+        )
+        return item
+
 
 class MusicBrainz:
     init = False
@@ -157,7 +196,7 @@ class MusicBrainz:
         if mbid is not None:
             # If we have MBID, we can query the label directly
             label_result = mbz.get_label_by_id(mbid, includes=["area-rels"])["label"]
-            label = MusicBrainz.parse_search_result(label_result)
+            label = MbzParser.parse_search_result(label_result)
             return label
 
         # No MBID, have to search. Assume first result is correct
@@ -190,7 +229,7 @@ class MusicBrainz:
         if mbid is not None:
             # If we have MBID, we can query the label directly
             artist_result = mbz.get_artist_by_id(mbid, includes=["area-rels"])["artist"]
-            artist = MusicBrainz.parse_search_result(artist_result)
+            artist = MbzParser.parse_search_result(artist_result)
             return artist
         # No MBID, have to search. Assume first result is correct
         artist_results = mbz.search_artists(query=name)
@@ -202,59 +241,6 @@ class MusicBrainz:
             return MusicBrainz.artist_search(name=name, mbid=artist_id)
         except (TypeError, IndexError):
             return None
-
-    @staticmethod
-    def parse_search_result(search_result: SearchResult) -> EntityInfo:
-        """
-        Parse a search result from the MusicBrainz API into a dictionary with the following keys:
-        - name: The name of the item (e.g. label, artist)
-        - mbid: The MusicBrainz ID of the item
-        - begin: The start date of the item, as a datetime object or None if not available
-        - end: The end date of the item, as a datetime object or None if not available
-        - country: The country of the item, or None if not available
-        - type: The type of the item (e.g. "Label", "Artist"), or None if not available
-
-        Args:
-            search_result (dict): The raw search result dictionary from the MusicBrainz API.
-
-        Returns:
-            dict: A dictionary containing the parsed information about the item.
-        """
-        if not isinstance(search_result, dict) or not search_result:
-            raise ValueError("Invalid or empty search result passed to the function")
-        try:
-            # Try to get the label's creation date
-            begin_raw = search_result["life_span"]["begin"]
-        except KeyError:
-            begin_raw = None
-        try:
-            # Try to get the label's end date
-            end_raw = search_result["life_span"]["end"]
-        except KeyError:
-            end_raw = None
-            # Parse from string to datetime
-        begin = Util.to_date("begin", begin_raw)
-        end = Util.to_date("end", end_raw)
-
-        try:
-            country = search_result["country"]
-        except KeyError:
-            country = None
-
-        try:
-            item_type = search_result["type"]
-        except KeyError:
-            item_type = None
-
-        item = EntityInfo(
-            name=search_result["name"],
-            mbid=search_result["id"],
-            begin=begin,
-            end=end,
-            country=country,
-            type=item_type,
-        )
-        return item
 
     @staticmethod
     def get_release_length(mbid: str) -> int:
