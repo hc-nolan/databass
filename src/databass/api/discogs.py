@@ -19,6 +19,7 @@ RATE_LIMIT_THRESHOLD: float = 1.1
 DIMENSIONS_PATTERN = r"/h:\d+/w:\d+/"
 HEIGHT_PATTERN = r"/h:(\d+)/.*"
 WIDTH_PATTERN = r".*/w:(\d+)/.*"
+DISAMBIG_PATTERN = r"\s*\(\d+\)\s*$"
 
 
 class Discogs:
@@ -104,29 +105,22 @@ class Discogs:
             return None
 
         item_id = None
-        try:
-            for result in res["results"]:
-                result_title = result.get("title")
-                # remove disambiguation chars
-                # e.g. "Future (4)" -> "Future"
-                if result_title is None:
+        results = res.get("results")
+        for result in results:
+            result_title = result.get("title")
+            if result_title is None:
+                continue
+            # remove disambiguation chars
+            # e.g. "Future (4)" -> "Future"
+            result_title = re.sub(DISAMBIG_PATTERN, "", result_title)
+            if result_title == name:
+                format = result.get("format")
+                if "Blu-ray" in format:
                     continue
-                result_title = re.sub(r"\s*\(\d+\)\s*$", "", result_title.strip())
-                if result_title == name:
-                    try:
-                        format = result.get("format")
-                        if "Blu-ray" in format:
-                            pass
-                        else:
-                            item_id = result.get("id")
-                            break
+                else:
+                    item_id = result.get("id")
+                    break
 
-                    except KeyError:
-                        pass
-        except IndexError:
-            return None
-        except KeyError:
-            return None
         if item_id:
             print(f"ID for {item_type} {name}: {item_id}")
             return item_id
