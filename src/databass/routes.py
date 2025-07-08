@@ -287,89 +287,6 @@ def register_routes(app):
         resp.headers["Cache-Control"] = "max-age=600"
         return resp
 
-    # TODO: see if still needed
-    @app.route("/stats_search", methods=["GET"])
-    def stats_search():
-        data = request.get_json()
-        sort = data["sort"]
-        metric = data["metric"]
-        item_type = data["item_type"]
-        item_property = data["item_property"]
-        stats.search(
-            sort=sort, metric=metric, item_type=item_type, item_property=item_property
-        )
-
-    # TODO: see if still needed
-    @app.route("/imgupdate/<item_type>/<item_id>")
-    def imgupdate(item_type, item_id):
-        print(f"Checking: {item_type} {item_id}")
-        item_id = int(item_id)
-        if item_type == "release":
-            item = models.Release.exists_by_id(item_id)
-        elif item_type == "artist":
-            item = models.Artist.exists_by_id(item_id)
-        elif item_type == "label":
-            item = models.Label.exists_by_id(item_id)
-        else:
-            raise ValueError(f"Unexpected item_type: {item_type}")
-        try:
-            img_path = "." + Util.img_exists(item_id=item_id, item_type=item_type)
-            print(f"Local image already exists: {img_path}")
-        except TypeError:
-            print("Local image not found, attempting to grab from external sources.")
-            # No local image exists, grab it
-            if item_type == "release":
-                release_name = item.name
-                release_artist = models.Artist.exists_by_id(item.artist_id)
-                artist_name = release_artist.name
-                img_path = Util.get_image(
-                    item_type=item_type,
-                    item_id=item_id,
-                    mbid=item.mbid,
-                    release_name=release_name,
-                    artist_name=artist_name,
-                )
-            elif item_type == "artist":
-                artist_name = item.name
-                img_path = Util.get_image(
-                    item_type=item_type,
-                    item_id=item_id,
-                    mbid=item.mbid,
-                    artist_name=artist_name,
-                )
-            elif item_type == "label":
-                label_name = item.name
-                img_path = Util.get_image(
-                    item_type=item_type,
-                    item_id=item_id,
-                    mbid=item.mbid,
-                    label_name=label_name,
-                )
-        if item.image != img_path:
-            item.image = img_path
-            print(f"Updating database entry: {item_type}.image => {img_path}")
-            db.update(item)
-        # Define the mappings for the order of items.
-        # All releases are fixed 1 by 1, then artists, then labels
-        next_type = {"release": "artist", "artist": "label", "label": None}
-        next_item = db.util.next_item(item_type=item_type, prev_id=item_id)
-        if next_item:
-            return redirect(f"/imgupdate/{item_type}/{next_item.id}")
-
-        # No next item; move onto next item type
-        next_item = next_type.get(item_type)
-        if next_item:
-            return redirect(f"/imgupdate/{next_item}/0")
-        # Complete, redirect to home
-        return redirect("/", code=302)
-
-    # TODO: see if still needed
-    @app.route("/fix_images")
-    def fix_images():
-        print("Fixing images.")
-        # Starts the imgupdate process; recursively calls itself and update all images 1 by 1
-        return redirect("/imgupdate/release/1")
-
     @app.route("/new_release", methods=["POST"])
     def new_release_popup():
         data = request.get_json()
@@ -389,7 +306,7 @@ def register_routes(app):
             str | None: The full country name if found, otherwise the original country code.
         """
         if code is None:
-            return code
+            return "?"
         try:
             country = pycountry.countries.get(alpha_2=code.upper())
             return country.name if country else code
