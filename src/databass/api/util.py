@@ -99,19 +99,6 @@ class Util:
     def get_image_type_from_bytes(bytestr: bytes) -> str:
         """
         Determine the image file extension from the byte representation of an image file.
-
-        This function acts as an image format filter, returning the appropriate file extension
-        based on the first few bytes of the input byte string.
-
-        Args:
-            bytestr (bytes): The byte representation of an image file.
-
-        Returns:
-            str: The file extension of the image, either '.jpg' or '.png'.
-
-        Raises:
-            ValueError: If the input byte string does not match the expected header for a
-                supported image type (JPEG or PNG).
         """
         if len(bytestr) < 8:
             raise ValueError("bytestr must be at least 8 bytes.")
