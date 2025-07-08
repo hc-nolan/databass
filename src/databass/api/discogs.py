@@ -146,8 +146,8 @@ class Discogs:
         except (TypeError, requests.RequestException):
             return None
         for item in results:
+            image_url = item.get("cover_image")
             try:
-                image_url = item["cover_image"]
                 # Attempt to determine image dimensions from the URL
                 # Should contain a string like /h:500/w:500/ to denote the height and width
                 # Below regex first extracts that entire substring;
@@ -164,7 +164,7 @@ class Discogs:
                 if height == width:
                     return image_url
             except Exception:
-                return None
+                continue
         print("INFO: No square images found.")
 
     @staticmethod
