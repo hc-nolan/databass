@@ -113,7 +113,7 @@ class MusicBrainz:
     @staticmethod
     def release_search(
         release: str = None, artist: str = None, label: str = None
-    ) -> Optional[list[ReleaseInfo]]:
+    ) -> list[ReleaseInfo]:
         """
         Performs a search for music releases on the MusicBrainz API.
 
