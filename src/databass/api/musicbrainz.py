@@ -123,7 +123,7 @@ class MusicBrainz:
             label (str, optional): The label name to search for.
 
         Returns:
-            Optional[list[ReleaseInfo]]: A list of `ReleaseInfo` objects representing the search results, or `None` if no results were found.
+            list[ReleaseInfo]: A list of `ReleaseInfo` objects representing the search results, or `None` if no results were found.
         """  # noqa
         if not MusicBrainz.init:
             MusicBrainz.initialize()
