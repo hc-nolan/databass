@@ -1,3 +1,4 @@
+import requests
 import datetime
 import signal
 from os import getenv
@@ -24,6 +25,7 @@ SUPPORTED_EXTENSIONS = {
     ".png",
     ".webp",
 }
+IMG_BASE_PATH = "./databass/static/img"
 
 
 class TimeoutException(Exception):
@@ -112,106 +114,134 @@ class Util:
             )
 
     @staticmethod
-    def get_image(
-        item_type: str,
-        item_id: str | int,
-        mbid: str = None,
-        release_name: str = None,
-        artist_name: str = None,
-        label_name: str = None,
-        url: str = None,
-    ):
-        # TODO: refactor
-        if url:
-            # if we are provided the url, just grab it, don't check APIs
-            import requests
+    def get_image_from_url(url: str, entity_type: str, entity_id: int | int):
+        response = requests.get(
+            url,
+            headers={
+                "User-Agent": f"databass/{VERSION} (https://github.com/chunned/databass)"
+            },
+        )
+        if response:
+            ext = Util.get_image_type_from_url(url)
+            img_filepath = IMG_BASE_PATH + f"/{entity_type}/" + str(entity_id) + ext
+            with open(img_filepath, "wb") as img_file:
+                img_file.write(response.content)
+            return img_filepath.replace("databass/", "")
 
-            response = requests.get(
-                url,
-                headers={
-                    "User-Agent": f"databass/{VERSION} (https://github.com/chunned/databass)"
-                },
+    @staticmethod
+    def get_caa_image(mbid: str) -> dict:
+        from .musicbrainz import MusicBrainz
+
+        """Get image from CoverArtArchive"""
+        print(f"Attempting to fetch image from CoverArtArchive: {mbid}")
+
+        timeout_duration = 5
+        signal.signal(signal.SIGALRM, timeout_handler)
+        signal.alarm(timeout_duration)
+
+        img = MusicBrainz.get_image(mbid)
+        if img is not None:
+            print("CoverArtArchive image found")
+            # CAA returns the raw image data
+            img_type = Util.get_image_type_from_bytes(img)
+        else:
+            raise ValueError(
+                "No image returned by CoverArtArchive, or an error was encountered when fetching the image."
             )
-            if response:
-                ext = Util.get_image_type_from_url(url)
-                base_path = "./databass/static/img"
-                img_filepath = base_path + f"/{item_type}/" + str(item_id) + ext
-                with open(img_filepath, "wb") as img_file:
-                    img_file.write(response.content)
-                return img_filepath.replace("databass/", "")
-        img = img_type = img_url = None
-        base_path = "./databass/static/img"
-        subdir = item_type
-        try:
-            # Create image subdirectory
-            Path(f"{base_path}/{subdir}").mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            print(f"Encountered exception while creating directory: {e}")
+        return {"image": img, "type": img_type}
 
-        if item_type not in ["release", "artist", "label"]:
-            raise Exception(f"Unexpected item_type: {item_type}")
-
+    @staticmethod
+    def get_discogs_image(
+        entity_type: str,
+        release_name: Optional[str],
+        artist_name: Optional[str],
+        label_name: Optional[str],
+    ) -> dict:
         from .discogs import Discogs
 
-        if mbid is not None and item_type == "release":
-            print(
-                f"Item is a release and MBID is populated; attempting to fetch image from CoverArtArchive: {mbid}"
+        match entity_type:
+            case "release":
+                img_url = Discogs.get_release_image_url(
+                    name=release_name, artist=artist_name
+                )
+            case "artist":
+                img_url = Discogs.get_artist_image_url(name=artist_name)
+            case "label":
+                img_url = Discogs.get_label_image_url(name=label_name)
+            case _:
+                return {}
+        if img_url is None:
+            return {}
+        response = requests.get(
+            img_url,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": f"databass/{VERSION} (https://github.com/hc-nolan/databass)",
+            },
+            timeout=60,
+        )
+        img = response.content
+        img_type = Util.get_image_type_from_bytes(img)
+        return {"image": img, "type": img_type}
+
+    @staticmethod
+    def get_image(
+        entity_type: str,
+        entity_id: str | int,
+        mbid: Optional[str],
+        release_name: Optional[str],
+        artist_name: Optional[str],
+        label_name: Optional[str],
+        url: Optional[str],
+    ):
+        if entity_type not in VALID_TYPES:
+            raise ValueError(f"Unexpected entity_type: {entity_type}")
+        if url:
+            return Util.get_image_from_url(
+                entity_id=entity_id, entity_type=entity_type, url=url
             )
-            from .musicbrainz import MusicBrainz
+        Path(f"{IMG_BASE_PATH}/{entity_type}").mkdir(parents=True, exist_ok=True)
 
+        if mbid is not None and entity_type == "release":
             try:
-                # Number of seconds to wait before raising a TimeoutException
-                timeout_duration = 5
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(timeout_duration)
-
-                img = MusicBrainz.get_image(mbid)
-                if img is not None:
-                    print("CoverArtArchive image found")
-                    # CAA returns the raw image data
-                    img_type = Util.get_image_type_from_bytes(img)
-                else:
-                    raise ValueError(
-                        "No image returned by CoverArtArchive, or an error was encountered when fetching the image."
-                    )
+                caa_image = Util.get_caa_image(mbid=mbid)
+                img = caa_image.get("image")
+                img_type = caa_image.get("type")
             except Exception:
                 print("Image not found on CAA, checking Discogs")
-                try:
-                    img_url = Discogs.get_release_image_url(
-                        name=release_name, artist=artist_name
-                    )
-                except Exception as e:
-                    print(f"Got an exception from Discogs: {e}")
+                Util.get_image(
+                    url=None,
+                    mbid=None,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    release_name=release_name,
+                    artist_name=artist_name,
+                    label_name=label_name,
+                )
         else:
-            print(f"Attempting to fetch {item_type} image from Discogs")
-            if item_type == "artist":
-                img_url = Discogs.get_artist_image_url(name=artist_name)
-            elif item_type == "label":
-                img_url = Discogs.get_label_image_url(name=label_name)
-        response = ""
-        if img_url is not None and img_url is not False:
-            import requests
-
-            print(f"Discogs image URL: {img_url}")
-            response = requests.get(
-                img_url,
-                headers={
-                    "Accept": "application/json",
-                    "User-Agent": f"databass/{VERSION} (https://github.com/chunned/databass)",
-                },
-                timeout=60,
-            )
-            img = response.content
-            img_type = Util.get_image_type_from_bytes(img)
+            print(f"Attempting to fetch {entity_type} image from Discogs")
+            discogs_image = Util.get_discogs_image()
+            img = discogs_image.get("image")
+            img_type = discogs_image.get("type")
 
         if img is not None and img_type is not None:
-            file_name = str(item_id) + img_type
-            file_path = base_path + "/" + subdir + "/" + file_name
-            with open(file_path, "wb") as img_file:
-                img_file.write(img)
-            print(f"Image saved to {file_path}")
-            return file_path.replace("databass/", "")
-        print(f"Discogs response: {response}")
+            return Util.write_image(
+                entity_type=entity_type,
+                entity_id=entity_id,
+                img_bytes=img,
+                img_type=img_type,
+            )
+
+    @staticmethod
+    def write_image(
+        entity_id: int, entity_type: str, img_type: str, img_bytes: bytes
+    ) -> str:
+        file_name = str(entity_id) + img_type
+        file_path = IMG_BASE_PATH + "/" + entity_type + "/" + file_name
+        with open(file_path, "wb") as img_file:
+            img_file.write(img_bytes)
+        print(f"Image saved to {file_path}")
+        return file_path.replace("databass/", "")
 
     @staticmethod
     def img_exists(item_id: int, item_type: str) -> Optional[str]:
@@ -249,3 +279,4 @@ class Util:
         if result:
             url = "/" + str(result[0]).replace("databass/", "")
             return url
+        return None
