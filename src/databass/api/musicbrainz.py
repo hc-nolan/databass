@@ -11,6 +11,94 @@ load_dotenv()
 VERSION = getenv("VERSION")
 
 
+class MbzParser:
+    @staticmethod
+    def parse_label_info(r: dict) -> dict:
+        """
+        Parse MusicBrainz release search results into dict with keys `mbid` and `name`
+        representing label info
+        """
+        labelinfo_list = r.get("label-info-list")
+        try:
+            labelinfo = labelinfo_list[0].get("label")
+        except IndexError:
+            label_id = ""
+            label_name = ""
+
+        label_id = labelinfo.get("id")
+        label_name = labelinfo.get("name")
+
+        return {"mbid": label_id, "name": label_name}
+
+    @staticmethod
+    def parse_artist_info(r: dict) -> dict:
+        """
+        Parse MusicBrainz release search results into dict with keys `mbid` and `name`
+        representing artist info
+        """
+        try:
+            artist_info = r.get("artist-credit")[0]
+            artist_name = artist_info.get("name")
+            artist_mbid = artist_info.get("artist")["id"]
+        except IndexError:
+            artist_name = ""
+            artist_mbid = ""
+        return {"mbid": artist_mbid, "name": artist_name}
+
+    @staticmethod
+    def parse_date(r: dict) -> str:
+        try:
+            raw_date = r.get("date")
+            date = dateparser.parse(raw_date, fuzzy=True).year
+        except dateparser.ParserError:
+            date = ""
+        return date
+
+    @staticmethod
+    def parse_format(r: dict) -> str:
+        try:
+            physical_release = r.get("medium-list")[0]
+            fmt = physical_release.get("format")
+        except IndexError:
+            fmt = ""
+        return fmt
+
+    @staticmethod
+    def parse_track_count(r: dict) -> int:
+        track_count = 0
+        try:
+            for disc in r.get("medium-list"):
+                track_count += disc.get("track-count")
+        except IndexError:
+            track_count = 0
+        return track_count
+
+    @staticmethod
+    def parse(r: dict) -> ReleaseInfo:
+        """
+        Parse all release information from MusicBrainz search results
+        """
+        label = MbzParser.parse_label_info(r)
+        date = MbzParser.parse_date(r)
+        release_format = MbzParser.parse_format(r)
+        track_count = MbzParser.parse_track_count(r)
+        country = r.get("country")
+        release_id = r.get("id")
+        release_name = r.get("title")
+
+        artist = MbzParser.parse_artist_info(r)
+        return ReleaseInfo(
+            release={"name": release_name, "mbid": release_id},
+            artist=artist,
+            label=label,
+            date=date,
+            format=release_format,
+            track_count=track_count,
+            country=country,
+            release_group_id=r.get("release-group")["id"],
+        )
+
+
 class MusicBrainz:
     init = False
 
@@ -36,76 +124,18 @@ class MusicBrainz:
 
         Returns:
             Optional[list[ReleaseInfo]]: A list of `ReleaseInfo` objects representing the search results, or `None` if no results were found.
-        """
-        if MusicBrainz.init:
-            if all(search_term is None for search_term in (release, artist, label)):
-                raise ValueError("At least one query term is required")
-            results = mbz.search_releases(artist=artist, label=label, release=release)
-            search_data = []  # Will hold the main return data
-            for r in results["release-list"]:
-                # Parse label data
-                try:
-                    labelinfo = r["label-info-list"][0]["label"]
-                    try:
-                        label_id = labelinfo["id"]
-                    except KeyError:
-                        label_id = ""
-                    try:
-                        label_name = labelinfo["name"]
-                    except KeyError:
-                        label_name = ""
-                except (KeyError, IndexError):
-                    # No label info found; continue with empty label data
-                    label_id = ""
-                    label_name = ""
-                label = {"mbid": label_id, "name": label_name}
-                try:
-                    raw_date = r["date"]
-                    date = dateparser.parse(raw_date, fuzzy=True).year
-                except (KeyError, dateparser.ParserError):
-                    date = ""
-                try:
-                    physical_release = r["medium-list"][0]
-                    try:
-                        release_format = physical_release["format"]
-                    except KeyError:
-                        release_format = ""
-                    try:
-                        track_count = 0
-                        for disc in r["medium-list"]:
-                            track_count += disc["track-count"]
-                    except KeyError:
-                        track_count = ""
-                except (KeyError, IndexError):
-                    release_format = ""
-                    track_count = ""
-                try:
-                    country = r["country"]
-                except KeyError:
-                    country = ""
-
-                release_id = r["id"]
-
-                rel = ReleaseInfo(
-                    release={"name": r["title"], "mbid": release_id},
-                    artist={
-                        "name": r["artist-credit"][0]["name"],
-                        "mbid": r["artist-credit"][0]["artist"]["id"],
-                    },
-                    label=label,
-                    date=date,
-                    format=release_format,
-                    track_count=track_count,
-                    country=country,
-                    release_group_id=r["release-group"]["id"],
-                )
-                search_data.append(rel)
-            return search_data
-        try:
+        """  # noqa
+        if not MusicBrainz.init:
             MusicBrainz.initialize()
-            return MusicBrainz.release_search(release, artist, label)
-        except RecursionError:
-            return None
+
+        if all(search_term is None for search_term in (release, artist, label)):
+            raise ValueError("At least one query term is required")
+        results = mbz.search_releases(artist=artist, label=label, release=release)
+        search_data = []  # Will hold the main return data
+        for r in results.get("release-list"):
+            release_info = MbzParser.parse(r)
+            search_data.append(release_info)
+        return search_data
 
     @staticmethod
     def label_search(name: str, mbid: str = None) -> Optional[LabelInfo]:
@@ -118,7 +148,7 @@ class MusicBrainz:
 
         Returns:
             Optional[LabelInfo]: A `LabelInfo` object containing the parsed information about the label, or `None` if the search fails.
-        """
+        """  # noqa
         if not name or not isinstance(name, str):
             return None
         if MusicBrainz.init:
@@ -260,10 +290,7 @@ class MusicBrainz:
         if not mbid or not isinstance(mbid, str):
             return 0
         if not MusicBrainz.init:
-            try:
-                MusicBrainz.initialize()
-            except RecursionError:
-                return 0
+            MusicBrainz.initialize()
 
         try:
             release_data = mbz.get_release_by_id(
