@@ -7,6 +7,7 @@ Implements the main routes for the databass application, including
 """
 
 from datetime import datetime
+from typing import Optional
 from os.path import join, abspath
 from glob import glob
 import flask
@@ -314,18 +315,22 @@ def register_routes(app):
             return code
 
     @app.template_filter("country_code")
-    def country_code(country: str) -> str | None:
-        """
-        Converts a country string to the corresponding two-letter country code
-        If country is `None` or not found in `pycountry`, original value is returned.
-        """
-        if country is None:
-            return "?"
-        try:
-            code = pycountry.countries.lookup(country)
-            return code.alpha_2 if code else None
-        except (KeyError, LookupError):
-            return country
+    def country_code_filter(country: str) -> Optional[str]:
+        return country_code(country)
+
+
+def country_code(country: str) -> Optional[str]:
+    """
+    Converts a country string to the corresponding two-letter country code
+    If country is `None` or not found in `pycountry`, original value is returned.
+    """
+    if country is None:
+        return "?"
+    try:
+        code = pycountry.countries.lookup(country)
+        return code.alpha_2 if code else None
+    except (KeyError, LookupError):
+        return country
 
 
 def process_goal_data(goal: models.Goal):
