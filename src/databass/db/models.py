@@ -523,6 +523,7 @@ class Release(MusicBrainzEntity):
 
         try:
             Util.get_image(
+                url=None,
                 entity_type="release",
                 entity_id=release_id,
                 release_name=data["name"],
