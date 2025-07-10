@@ -20,8 +20,9 @@ class MbzParser:
         """
         labelinfo_list = r.get("label-info-list")
         try:
-            labelinfo = labelinfo_list[0].get("label")
-        except IndexError:
+            labelinfo = labelinfo_list[0].get("label", {})
+        except (AttributeError, TypeError, IndexError):
+            labelinfo = {}
             label_id = ""
             label_name = ""
 
@@ -40,7 +41,8 @@ class MbzParser:
             artist_info = r.get("artist-credit")[0]
             artist_name = artist_info.get("name")
             artist_mbid = artist_info.get("artist")["id"]
-        except IndexError:
+        except (AttributeError, TypeError, IndexError):
+            artist_info = {}
             artist_name = ""
             artist_mbid = ""
         return {"mbid": artist_mbid, "name": artist_name}
@@ -50,7 +52,7 @@ class MbzParser:
         try:
             raw_date = r.get("date")
             date = dateparser.parse(raw_date, fuzzy=True).year
-        except dateparser.ParserError:
+        except Exception:
             date = ""
         return date
 
@@ -120,7 +122,7 @@ class MbzParser:
 
         country = search_result.get("country")
         item_type = search_result.get("type")
-        lifespan = search_result.get("life_span")
+        lifespan = search_result.get("life_span", {})
 
         begin_raw = lifespan.get("begin")
         end_raw = lifespan.get("end")
