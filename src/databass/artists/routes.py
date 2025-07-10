@@ -79,7 +79,7 @@ def edit_artist(artist_id):
         if image_url is not None:
             if "http" and "://" in image_url:
                 # If image is a URL, download it
-                Util.get_image(item_type="artist", item_id=artist_id, url=image_url)
+                Util.get_image(entity_type="artist", entity_id=artist_id, url=image_url)
                 artist_data.image = image_url
             else:
                 print("Image not a URL. Skipping.")
