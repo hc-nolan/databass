@@ -21,7 +21,8 @@ class MbzParser:
         labelinfo_list = r.get("label-info-list")
         try:
             labelinfo = labelinfo_list[0].get("label")
-        except IndexError:
+        except (TypeError, IndexError):
+            labelinfo = {}
             label_id = ""
             label_name = ""
 
@@ -50,7 +51,7 @@ class MbzParser:
         try:
             raw_date = r.get("date")
             date = dateparser.parse(raw_date, fuzzy=True).year
-        except dateparser.ParserError:
+        except Exception:
             date = ""
         return date
 
