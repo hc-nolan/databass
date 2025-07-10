@@ -856,10 +856,24 @@ class ArtistOrLabel(MusicBrainzEntity):
             item_id = insert(new_item)
             # TODO: see if Util.get_image() can be refactored; instead of label_name and artist_name use item_name
             if cls.__name__ == "Label":
-                Util.get_image(entity_type="label", entity_id=item_id, label_name=name)
+                Util.get_image(
+                    entity_type="label",
+                    entity_id=item_id,
+                    label_name=name,
+                    mbid=None,
+                    release_name=None,
+                    artist_name=None,
+                    url=None,
+                )
             elif cls.__name__ == "Artist":
                 Util.get_image(
-                    entity_type="artist", entity_id=item_id, artist_name=name
+                    entity_type="artist",
+                    entity_id=item_id,
+                    artist_name=name,
+                    mbid=None,
+                    release_name=None,
+                    label_name=None,
+                    url=None,
                 )
             # TODO: figure out a way to call Util.get_image() upon any insertion so it doesn't need to be manually called
         return item_id
