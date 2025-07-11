@@ -598,7 +598,7 @@ class ArtistOrLabel(MusicBrainzEntity):
                     cls.name, func.count(relation_id).label("count"), cls.image
                 )
                 .join(Release, relation_id == cls.id)
-                .where(cls.name.notin_(["[NONE]", "Various Artists"]))
+                .where(cls.name.notin_(["[NONE]", "Various Artists", "", "[no label]"]))
                 .group_by(cls.name, cls.image)
                 .order_by(func.count(relation_id).desc())
                 .limit(limit)
