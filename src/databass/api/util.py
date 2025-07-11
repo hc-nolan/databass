@@ -218,7 +218,12 @@ class Util:
                 )
         else:
             print(f"Attempting to fetch {entity_type} image from Discogs")
-            discogs_image = Util.get_discogs_image()
+            discogs_image = Util.get_discogs_image(
+                entity_type=entity_type,
+                release_name=release_name,
+                artist_name=artist_name,
+                label_name=label_name,
+            )
             img = discogs_image.get("image")
             img_type = discogs_image.get("type")
 

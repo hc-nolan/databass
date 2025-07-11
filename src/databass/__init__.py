@@ -14,21 +14,34 @@ print(f"App version: {VERSION}")
 def create_app():
     app = Flask(__name__, instance_relative_config=False)
     app.config.from_object("config.Config")
+
+    is_testing = (
+        "PYTEST_CURRENT_TEST" in os.environ
+        or app.config.get("TESTING", False)
+        or os.environ.get("TESTING", "").lower() == "true"
+    )
+    if is_testing:
+        app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+        app.config["TESTING"] = True
+
     app.static_folder = "static"
     app_db.init_app(app)
 
-    assets = Environment(app)
-    style_bundle = Bundle(
-        "src/less/*.less",
-        filters="less,cssmin",
-        output="dist/css/style.min.css",
-        extra={"rel": "stylesheet/css"},
-    )
-    assets.register("main_styles", style_bundle)
-    style_bundle.build()
-    js_bundle = Bundle("src/js/main.js", filters="jsmin", output="dist/js/main.min.js")
-    assets.register("main_js", js_bundle)
-    js_bundle.build()
+    if not is_testing:
+        assets = Environment(app)
+        style_bundle = Bundle(
+            "src/less/*.less",
+            filters="less,cssmin",
+            output="dist/css/style.min.css",
+            extra={"rel": "stylesheet/css"},
+        )
+        assets.register("main_styles", style_bundle)
+        style_bundle.build()
+        js_bundle = Bundle(
+            "src/js/main.js", filters="jsmin", output="dist/js/main.min.js"
+        )
+        assets.register("main_js", js_bundle)
+        js_bundle.build()
 
     with app.app_context():
         from .db.models import Base, Release, Artist, Label, Genre, Review, Goal

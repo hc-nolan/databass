@@ -74,6 +74,9 @@ class TestRelease:
     def test_release_successful_page_load(
         self, client, mock_release_data, mock_artist_data, mock_label_data, mocker
     ):
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
         mocker.patch("databass.db.models.Release.get_reviews", return_value=[])
         response = client.get("/release/1")
         assert response.status_code == 200
@@ -89,11 +92,20 @@ class TestRelease:
 class TestEdit:
     # Tests for /release/<id>/edit
     def test_edit_get_success(
-        self, client, mock_release_data, mock_artist_data, mock_label_data
+        self, mocker, client, mock_release_data, mock_artist_data, mock_label_data
     ):
         """
         Test for successful handling of a GET request, which displays the editable fields
         """
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        mocker.patch(
+            "databass.db.models.Release.get_distinct_column_values",
+            return_value=["a", "b"],
+        )
+        mocker.patch("databass.db.models.Label.exists_by_id", return_value=True)
+        mocker.patch("databass.db.models.Artist.exists_by_id", return_value=True)
         response = client.get("/release/1/edit")
         assert response.status_code == 200
         assert b"edit_form" in response.data
@@ -112,8 +124,9 @@ class TestEdit:
         """
         Test for successful handling of a POST request, which submits edited data
         """
-        mock_construct = mocker.patch(
-            "databass.db.construct_item", return_value=mock_release_data
+        mocker.patch("databass.db.construct_item", return_value=mock_release_data)
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
         mocker.patch("databass.db.update")
         response = client.post(
@@ -157,6 +170,7 @@ class TestDelete:
         Test for proper handling of a successful deletion
         """
         mocker.patch("databass.db.delete")
+        mocker.patch("databass.db.models.Release.exists_by_id", return_value="a")
         delete_data = {"id": 1, "type": "release"}
         response = client.post("/delete", json=delete_data)
         assert response.status_code == 302
