@@ -14,14 +14,17 @@ print(f"App version: {VERSION}")
 def create_app():
     app = Flask(__name__, instance_relative_config=False)
     app.config.from_object("config.Config")
-    app.static_folder = "static"
-    app_db.init_app(app)
 
     is_testing = (
         "PYTEST_CURRENT_TEST" in os.environ
         or app.config.get("TESTING", False)
         or os.environ.get("TESTING", "").lower() == "true"
     )
+    if is_testing:
+        app.config.SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+
+    app.static_folder = "static"
+    app_db.init_app(app)
 
     if not is_testing:
         assets = Environment(app)
@@ -38,8 +41,6 @@ def create_app():
         )
         assets.register("main_js", js_bundle)
         js_bundle.build()
-    else:
-        app.config.SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
 
     with app.app_context():
         from .db.models import Base, Release, Artist, Label, Genre, Review, Goal
