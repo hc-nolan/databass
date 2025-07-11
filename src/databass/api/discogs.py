@@ -114,7 +114,7 @@ class Discogs:
             # e.g. "Future (4)" -> "Future"
             result_title = re.sub(DISAMBIG_PATTERN, "", result_title)
             if result_title == name:
-                format = result.get("format")
+                format = result.get("format", [])
                 if "Blu-ray" in format:
                     continue
                 else:
