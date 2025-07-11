@@ -45,9 +45,9 @@ class Util:
     def to_begin_or_end(option: str) -> datetime.date:
         match option:
             case "begin":
-                return datetime.datetime(year=1, month=1, day=1)
+                return datetime.date(year=1, month=1, day=1)
             case "end":
-                return datetime.datetime(year=9999, month=12, day=31)
+                return datetime.date(year=9999, month=12, day=31)
             case _:
                 raise ValueError(
                     f"Invalid option: {option} - should be 'begin' or 'end'"

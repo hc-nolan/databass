@@ -144,43 +144,43 @@ def handle_submit_data(submit_data: dict) -> None:
     """
     from ..api import MusicBrainz
 
-    if submit_data["mbid"]:
+    if submit_data.get("mbid"):
         runtime = MusicBrainz.get_release_length(submit_data["mbid"])
         submit_data["runtime"] = runtime
         # If we aren't handling a MusicBrainz release,
         # the user can optionally pass in the runtime and it's already in submit_data
 
-    if submit_data["label_mbid"]:
+    if submit_data.get("label_mbid"):
         label_id = Label.create_if_not_exist(
             mbid=submit_data["label_mbid"],
             name=submit_data["label_name"],
         )
-    elif submit_data["label_name"]:
+    elif submit_data.get("label_name"):
         label_id = Label.create_if_not_exist(name=submit_data["label_name"])
     else:
         label_id = 0
 
     submit_data["label_id"] = label_id
 
-    if submit_data["artist_mbid"]:
+    if submit_data.get("artist_mbid"):
         artist_id = Artist.create_if_not_exist(
             mbid=submit_data["artist_mbid"],
             name=submit_data["artist_name"],
         )
-    elif submit_data["artist_name"]:
+    elif submit_data.get("artist_name"):
         artist_id = Artist.create_if_not_exist(name=submit_data["artist_name"])
     else:
         artist_id = 0
 
     submit_data["artist_id"] = artist_id
 
-    if submit_data["main_genre"] is not None:
+    if submit_data.get("main_genre") is not None:
         main_genre = Genre.create_if_not_exists(submit_data["main_genre"])
         submit_data["main_genre"] = main_genre
         submit_data["main_genre_id"] = main_genre.id
 
     genres = []
-    if submit_data["genres"]:
+    if submit_data.get("genres"):
         for g in submit_data["genres"].split(","):
             genres.append(Genre.create_if_not_exists(g))
     submit_data["genres"] = genres

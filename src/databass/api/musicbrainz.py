@@ -59,9 +59,9 @@ class MbzParser:
     @staticmethod
     def parse_format(r: dict) -> str:
         try:
-            physical_release = r.get("medium-list")[0]
+            physical_release = r.get("medium-list", [])[0]
             fmt = physical_release.get("format")
-        except IndexError:
+        except (TypeError, IndexError):
             fmt = ""
         return fmt
 
@@ -69,7 +69,7 @@ class MbzParser:
     def parse_track_count(r: dict) -> int:
         track_count = 0
         try:
-            for disc in r.get("medium-list"):
+            for disc in r.get("medium-list", []):
                 track_count += disc.get("track-count")
         except IndexError:
             track_count = 0
@@ -231,7 +231,12 @@ class MusicBrainz:
             MusicBrainz.initialize()
         if mbid is not None:
             # If we have MBID, we can query the label directly
-            artist_result = mbz.get_artist_by_id(mbid, includes=["area-rels"])["artist"]
+            try:
+                artist_result = mbz.get_artist_by_id(mbid, includes=["area-rels"])[
+                    "artist"
+                ]
+            except Exception:
+                return None
             artist = MbzParser.parse_search_result(artist_result)
             return artist
         # No MBID, have to search. Assume first result is correct
@@ -301,19 +306,19 @@ class MusicBrainz:
         try:
             return mbz.get_release_group_image_front(mbid, size=size)
         except musicbrainzngs.musicbrainz.ResponseError:
-            try:
-                covers: Dict[str, Any] = mbz.get_image_list(mbid)
+            covers: Dict[str, Any] = mbz.get_image_list(mbid)
+            coverid = MusicBrainz._get_first_cover_id(covers)
+            if coverid:
+                return mbz.get_image(mbid, coverid=coverid, size=size)
+            return None
+        except Exception:
+            return None
 
-                if covers:
-                    imgs = covers.get("images")
+    @staticmethod
+    def _get_first_cover_id(covers: list) -> Optional[str]:
+        """Retrieve the MBID of the first element in the list, or None"""
+        if not covers:
+            return None
 
-                    try:
-                        coverid = imgs[0]["id"]
-                        return mbz.get_image(mbid, coverid=coverid, size=size)
-                    except (TypeError, IndexError):
-                        return None
-
-            except musicbrainzngs.musicbrainz.ResponseError:
-                return None
-
-        return None
+        imgs = covers.get("images", [])
+        return imgs[0].get("id") if imgs else None
