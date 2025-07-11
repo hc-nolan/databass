@@ -21,7 +21,8 @@ def create_app():
         or os.environ.get("TESTING", "").lower() == "true"
     )
     if is_testing:
-        app.config.SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
+        app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///:memory:"
+        app.config["TESTING"] = True
 
     app.static_folder = "static"
     app_db.init_app(app)
