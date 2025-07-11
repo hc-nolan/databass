@@ -105,7 +105,7 @@ class Discogs:
             return None
 
         item_id = None
-        results = res.get("results")
+        results = res.get("results", [])
         for result in results:
             result_title = result.get("title")
             if result_title is None:
@@ -184,13 +184,13 @@ class Discogs:
             or not isinstance(search_results["images"], list)
         ):
             return None
-        imgs = search_results.get("images")
+        imgs = search_results.get("images", [])
         print(f"{len(imgs)} candidates found")
         for image in imgs:
-            img_url = image.get("url")
+            img_url = image.get("uri")
             height = image.get("height")
             width = image.get("width")
-            if height == width:
+            if height == width and height is not None:
                 print(f"Square image found: {img_url}")
                 return img_url
             print(f"Non-square image: H:{height}/W:{width} | {img_url}")

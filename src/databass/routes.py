@@ -35,17 +35,10 @@ def get_manual_release_data(data) -> dict:
     """
     genres = data.get("genres")
     image = data.get("image")
-    runtime_ms = data.get("runtime")
-    try:
-        runtime = int(runtime_ms) * 60000
-    except ValueError:
-        runtime = 0
-
-    track_count = data.get("track_count")
-    try:
-        track_count = int(track_count)
-    except ValueError:
-        track_count = 0
+    runtime_ms = data.get("runtime", 0)
+    runtime = int(runtime_ms) * 60000
+    track_count = data.get("track_count", 0)
+    track_count = int(track_count)
 
     country = country_code(data.get("country"))
 
@@ -152,9 +145,10 @@ def register_routes(app):
         search_artist = data.get("artist")
         search_label = data.get("label")
 
-        if not search_release and not search_artist and not search_label:
+        if search_release is None and search_artist is None and search_label is None:
             error = "ERROR: Search requires at least one search term"
-            return error
+            flash(error)
+            return redirect("/error")
 
         release_data = MusicBrainz.release_search(
             release=search_release, artist=search_artist, label=search_label
@@ -325,7 +319,7 @@ def country_code(country: str) -> Optional[str]:
     If country is `None` or not found in `pycountry`, original value is returned.
     """
     if country is None:
-        return "?"
+        return None
     try:
         code = pycountry.countries.lookup(country)
         return code.alpha_2 if code else None
