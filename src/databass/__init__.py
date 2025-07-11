@@ -38,6 +38,8 @@ def create_app():
         )
         assets.register("main_js", js_bundle)
         js_bundle.build()
+    else:
+        app.config.SQLALCHEMY_DATABASE_URI = "sqlite:///:memory:"
 
     with app.app_context():
         from .db.models import Base, Release, Artist, Label, Genre, Review, Goal
