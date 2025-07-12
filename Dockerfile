@@ -1,4 +1,5 @@
 FROM python:3.13.0-alpine3.20
+COPY --from=ghcr.io/astral-sh/uv:0.5.29 /uv /uvx /bin/
 
 COPY ./src /databass
 WORKDIR /databass
@@ -6,8 +7,8 @@ WORKDIR /databass
 RUN \
   apk add --no-cache postgresql-libs && \
   apk add --no-cache --virtual .build-deps gcc musl-dev postgresql-dev && \
-  pip3 install gunicorn && \
-  pip3 install -r requirements.txt && \
+  uv sync --frozen \
+  uv add gunicorn \
   apk add --no-cache nodejs npm && \
   apk --purge del .build-deps && \
   npm install -g less && \
