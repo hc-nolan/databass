@@ -149,6 +149,17 @@ def handle_submit_data(submit_data: dict) -> None:
         submit_data["runtime"] = runtime
         # If we aren't handling a MusicBrainz release,
         # the user can optionally pass in the runtime and it's already in submit_data
+    else:
+        # If no release MBID is passed, this is a manual submission
+        # Check for an existing matching release+artist entry
+        # Otherwise, duplicate entries may be created
+        existing_release = Release.exists_by_name(submit_data["name"])
+        if existing_release:
+            existing_artist = existing_release.artist
+            candidate = (submit_data["name"].lower(), submit_data["artist_name"].lower())
+            existing = (existing_release.name.lower(), existing_artist.name.lower())
+            if candidate == existing:
+                return None
 
     if submit_data.get("label_mbid"):
         label_id = Label.create_if_not_exist(
