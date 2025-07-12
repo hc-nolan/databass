@@ -20,6 +20,7 @@ dependencies = [
     "pychart-js>=0.3.0",
     "pycountry>=24.6.1",
     "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
     "pytest-mock>=3.14.1",
     "python-dateutil>=2.9.0.post0",
     "python-dotenv>=1.1.1",

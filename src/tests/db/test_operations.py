@@ -3,18 +3,21 @@ from sqlalchemy.exc import IntegrityError
 from databass.db.operations import insert, update, delete, get_model, construct_item
 from databass.db.models import Artist, Label, Release
 
+
 class MockModel:
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 
+
 mock_models = {
-    'Release': MockModel,
-    'Artist': MockModel,
-    'Label': MockModel,
-    'Goal': MockModel,
-    'Review': MockModel,
-    'Tag': MockModel,
+    "Release": MockModel,
+    "Artist": MockModel,
+    "Label": MockModel,
+    "Goal": MockModel,
+    "Review": MockModel,
+    "Tag": MockModel,
 }
+
 
 @pytest.fixture
 def mock_model_fixture():
@@ -24,20 +27,19 @@ def mock_model_fixture():
 @pytest.fixture
 def mock_db_session(mocker):
     """Fixture to mock database session"""
-    return mocker.patch('databass.db.operations.app_db.session')
+    return mocker.patch("databass.db.operations.app_db.session")
+
 
 class TestGetModel:
     # Tests for get_model()
     def test_get_model_success(self, mocker):
         class MockModel:
             pass
+
         result = get_model("release")
         assert result == Release
 
-    @pytest.mark.parametrize(
-        "model",
-        [1, [1], {"1": 1}, 1.0]
-    )
+    @pytest.mark.parametrize("model", [1, [1], {"1": 1}, 1.0])
     def test_get_model_fail_invalid_input(self, model):
         with pytest.raises(ValueError, match="model_name must be a string"):
             get_model(model)
@@ -45,7 +47,10 @@ class TestGetModel:
     def test_get_model_fail_model_not_found(self, mocker):
         class MockModel:
             pass
-        mock_globals = mocker.patch("databass.db.util.globals", return_value={"Model": MockModel})
+
+        mock_globals = mocker.patch(
+            "databass.db.util.globals", return_value={"Model": MockModel}
+        )
         with pytest.raises(NameError, match="No model with the name"):
             get_model("TestModel")
 
@@ -55,13 +60,13 @@ class TestConstructItem:
     @pytest.mark.parametrize(
         "model,data_dict",
         [
-            ('release',{"name": "Test Release"}),
-            ('artist', {"name": "Test Artist"}),
-            ('label', {"name": "Test Label"}),
-            ('goal', {"name": "Test Goal"}),
-            ('review', {"name": "Test Review"}),
-            ('tag', {"name": "Test Tag"})
-        ]
+            ("release", {"name": "Test Release"}),
+            ("artist", {"name": "Test Artist"}),
+            ("label", {"name": "Test Label"}),
+            ("goal", {"name": "Test Goal"}),
+            ("review", {"name": "Test Review"}),
+            ("tag", {"name": "Test Tag"}),
+        ],
     )
     def test_construct_item_success(self, model, data_dict, mocker, mock_model_fixture):
         mocker.patch("databass.db.operations.get_model", side_effect=mock_model_fixture)
@@ -71,12 +76,13 @@ class TestConstructItem:
         assert isinstance(item, expected_class)
         assert item.name == name
 
-
     def test_construct_item_fail_invalid_model_name(self, mocker, mock_model_fixture):
         """
         Test for successful handling of a model name not found in valid_models
         """
-        mock_get_model = mocker.patch("databass.db.operations.get_model", side_effect=mock_model_fixture)
+        mock_get_model = mocker.patch(
+            "databass.db.operations.get_model", side_effect=mock_model_fixture
+        )
         data_dict = {"name": "asdf"}
         bad_name = "asdf"
         with pytest.raises(NameError):
@@ -133,11 +139,14 @@ class TestInsert:
 
         mock_db_session.rollback.assert_called_once()
 
-    @pytest.mark.parametrize("model_class,test_data", [
-        (Artist, {"name": "Test Artist"}),
-        (Label, {"name": "Test Label"}),
-        (Release, {"name": "Test Release", "year": 2024})
-    ])
+    @pytest.mark.parametrize(
+        "model_class,test_data",
+        [
+            (Artist, {"name": "Test Artist"}),
+            (Label, {"name": "Test Label"}),
+            (Release, {"name": "Test Release", "year": 2024}),
+        ],
+    )
     def test_insert_different_models(self, mock_db_session, model_class, test_data):
         """
         Test insertion of different model types
@@ -196,14 +205,21 @@ class TestUpdate:
 
         mock_db_session.rollback.assert_called_once()
 
-    @pytest.mark.parametrize("model_class,initial_data,updated_data", [
-        (Artist, {"name": "Initial Artist"}, {"name": "Updated Artist"}),
-        (Label, {"name": "Initial Label"}, {"name": "Updated Label"}),
-        (Release,
-         {"name": "Initial Release", "year": 2023},
-         {"name": "Updated Release", "year": 2024})
-    ])
-    def test_update_different_models(self, mock_db_session, model_class, initial_data, updated_data):
+    @pytest.mark.parametrize(
+        "model_class,initial_data,updated_data",
+        [
+            (Artist, {"name": "Initial Artist"}, {"name": "Updated Artist"}),
+            (Label, {"name": "Initial Label"}, {"name": "Updated Label"}),
+            (
+                Release,
+                {"name": "Initial Release", "year": 2023},
+                {"name": "Updated Release", "year": 2024},
+            ),
+        ],
+    )
+    def test_update_different_models(
+        self, mock_db_session, model_class, initial_data, updated_data
+    ):
         """
         Test update of different model types
         Verifies that:
@@ -265,6 +281,7 @@ class TestUpdate:
         assert initial_artist._private_attr == "initial"
         mock_db_session.commit.assert_called_once()
 
+
 class TestDelete:
     """Tests for delete()"""
 
@@ -291,7 +308,7 @@ class TestDelete:
         - NameError is raised with correct message
         - Session is rolled back
         """
-        with pytest.raises(Exception, match="Unexpected error: No model with the name"):
+        with pytest.raises(Exception, match="No model with the name"):
             delete("invalid_type", "1")
 
         mock_db_session.rollback.assert_called_once()
@@ -305,17 +322,18 @@ class TestDelete:
         """
         mock_db_session.query().where().one.side_effect = Exception("No such item")
 
-        with pytest.raises(Exception, match="Unexpected error: No such item"):
+        with pytest.raises(Exception, match="No such item"):
             delete("artist", "999")
 
         mock_db_session.rollback.assert_called_once()
 
-    @pytest.mark.parametrize("model_type,item_id,expected_model", [
-        ("artist", "1", Artist),
-        ("label", "2", Label),
-        ("release", "3", Release)
-    ])
-    def test_delete_different_models(self, mock_db_session, model_type, item_id, expected_model):
+    @pytest.mark.parametrize(
+        "model_type,item_id,expected_model",
+        [("artist", "1", Artist), ("label", "2", Label), ("release", "3", Release)],
+    )
+    def test_delete_different_models(
+        self, mock_db_session, model_type, item_id, expected_model
+    ):
         """
         Test deletion of different model types
         Verifies that:
@@ -340,7 +358,12 @@ class TestDelete:
         """
         mock_db_session.query().where().one.side_effect = Exception("Database error")
 
-        with pytest.raises(Exception, match="Unexpected error: Database error"):
+        with pytest.raises(Exception, match="Database error"):
             delete("artist", "1")
 
         mock_db_session.rollback.assert_called_once()
+
+    def test_delete_no_db_match(self, mock_db_session):
+        mock_db_session.query().where().one.return_value = None
+        with pytest.raises(ValueError, match="No release entry found"):
+            delete("release", 1)
