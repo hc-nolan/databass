@@ -5,6 +5,7 @@ from os import getenv
 from pathlib import Path
 from typing import Optional
 from dotenv import load_dotenv
+from uuid import uuid4
 
 load_dotenv()
 VERSION = getenv("VERSION")
@@ -241,7 +242,7 @@ class Util:
     def write_image(
         entity_id: int, entity_type: str, img_type: str, img_bytes: bytes
     ) -> str:
-        file_name = str(entity_id) + img_type
+        file_name = uuid4() + img_type
         file_path = IMG_BASE_PATH + "/" + entity_type + "/" + file_name
         with open(file_path, "wb") as img_file:
             img_file.write(img_bytes)
