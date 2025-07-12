@@ -1,0 +1,29 @@
+[project]
+name = "databass"
+version = "0.6.0"
+description = "A diary for your music listening."
+authors = [
+    { name = "hnolan", email = "hayden@hnolan.ca" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "cssmin>=0.2.0",
+    "flask>=3.1.1",
+    "flask-assets>=2.1.0",
+    "flask-migrate>=4.1.0",
+    "flask-paginate>=2024.4.12",
+    "flask-sqlalchemy>=3.1.1",
+    "jsmin>=3.0.1",
+    "lesscpy>=0.15.1",
+    "musicbrainzngs>=0.7.1",
+    "psycopg2>=2.9.10",
+    "pychart-js>=0.3.0",
+    "pycountry>=24.6.1",
+    "pytest>=8.4.1",
+    "pytest-mock>=3.14.1",
+    "python-dateutil>=2.9.0.post0",
+    "python-dotenv>=1.1.1",
+    "pytz>=2025.2",
+    "requests>=2.32.4",
+    "sqlalchemy>=2.0.41",
+]
