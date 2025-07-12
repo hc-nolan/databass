@@ -30,7 +30,7 @@
     </thead>
     <tbody>
         {% for item in data %}
-            <tr class="row" data-item="{{ item }}">
+            <tr class="row" data-item='{{ item | tojson | safe }}'>
                 <td style="width: 11%;"><input value="{{ item }}" type="radio" name="selected_item" hidden></td>
                 <td>{{ item['release']['name'] }}</td>
                 <td>{{ item['artist']['name'] }}</td>

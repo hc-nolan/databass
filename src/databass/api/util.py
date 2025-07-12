@@ -200,6 +200,8 @@ class Util:
             )
         Path(f"{IMG_BASE_PATH}/{entity_type}").mkdir(parents=True, exist_ok=True)
 
+        img = img_type = None
+
         if mbid is not None and entity_type == "release":
             try:
                 caa_image = Util.get_caa_image(mbid=mbid)
