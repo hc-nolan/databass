@@ -288,29 +288,25 @@ def register_routes(app):
         return render_template("new_release_popup.html", data=data)
 
     @app.template_filter("country_name")
-    def country_name(code: str) -> str | None:
-        """
-        Converts a two-letter country code to the full country name.
-        If the country code is `None` or not found in the `pycountry` library,
-        the original country code is returned.
-
-        Args:
-            code (str): The two-letter ISO 3166-1 alpha-2 country code.
-
-        Returns:
-            str | None: The full country name if found, otherwise the original country code.
-        """
-        if code is None:
-            return "?"
-        try:
-            country = pycountry.countries.get(alpha_2=code.upper())
-            return country.name if country else code
-        except KeyError:
-            return code
+    def country_name_filter(code: Optional[str]) -> Optional[str]:
+        return country_name(code)
 
     @app.template_filter("country_code")
     def country_code_filter(country: str) -> Optional[str]:
         return country_code(country)
+
+
+def country_name(code: Optional[str]) -> Optional[str]:
+    """
+    Converts a two-letter country code to the full country name.
+    If the country code is `None` or not found in the `pycountry` library,
+    the original country code is returned.
+    """
+    try:
+        country = pycountry.countries.get(alpha_2=code.upper())
+        return country.name if country else code
+    except AttributeError:
+        return code
 
 
 def country_code(country: str) -> Optional[str]:
