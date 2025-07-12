@@ -54,6 +54,7 @@ function formatDataString(data) {
     // Both of the above cases are caused by the other more generic replacements
     // Way to avoid most of this altogether would be to just URLencode key/value pairs
     return data
+        .replace(/None/g, 'null')
         .replace(/{'/g, '{"')
         .replace(/'}/g, '"}')
         .replace(/':/g, '":')
