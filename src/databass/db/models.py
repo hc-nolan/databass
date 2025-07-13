@@ -508,7 +508,13 @@ class Release(MusicBrainzEntity):
 
         if data["image"] is not None:
             Util.get_image(
-                entity_type="release", entity_id=release_id, url=data["image"]
+                entity_type="release",
+                entity_id=release_id,
+                url=data["image"],
+                mbid=None,
+                release_name=None,
+                artist_name=None,
+                label_name=None,
             )
         else:
             Util.get_image(
