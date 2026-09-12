@@ -24,7 +24,7 @@ class TestNew:
     def test_new_page_load_success(self, client):
         response = client.get("/new")
         assert response.status_code == 200
-        assert b"new-release" in response.data
+        assert b"new_release" in response.data
 
 
 class TestSearch:

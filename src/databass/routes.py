@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Optional
 from os.path import join, abspath
 from glob import glob
+from itertools import groupby
 import flask
 from flask import (
     render_template,
@@ -27,6 +28,89 @@ from . import db
 from .db import models
 from .db.util import get_all_stats, handle_submit_data
 from .pagination import Pager
+
+
+def image_exists(itemtype: str, itemid: int) -> bool:
+    """Check whether a downloaded cover/artist/label image exists on disk."""
+    img_dir = abspath(join("databass", "static", "img", itemtype))
+    return bool(glob(join(img_dir, f"{itemid}.*")))
+
+
+def initials(name: Optional[str], max_len: int = 4) -> str:
+    """Derive an art-placeholder initials string, e.g. 'Sunn O)))' -> 'SO'."""
+    if not name:
+        return "?"
+    letters = "".join(word[0] for word in name.split() if word)
+    return letters[:max_len].upper() or "?"
+
+
+def format_runtime(runtime_ms: Optional[int]) -> str:
+    """Format a runtime in milliseconds as e.g. '1h 20m' or '54m'."""
+    minutes = round((runtime_ms or 0) / 60000)
+    hours, remainder = divmod(minutes, 60)
+    if hours:
+        return f"{hours}h {remainder}m" if remainder else f"{hours}h"
+    return f"{minutes}m"
+
+
+def day_label(day, today) -> str:
+    """Format a day-group heading, e.g. 'TODAY · SAT 12 SEP'."""
+    diff = (today - day).days
+    weekday_month = day.strftime("%a %d %b").upper()
+    if diff == 0:
+        return f"TODAY · {weekday_month}"
+    if diff == 1:
+        return f"YESTERDAY · {weekday_month}"
+    return f"{weekday_month} · {diff}D AGO"
+
+
+def build_entry(release: models.Release) -> dict:
+    """Build the template-ready dict for a single home-page entry row."""
+    latest_review = release.reviews[0] if release.reviews else None
+    subgenres = [g.name for g in release.genres if g.id != release.main_genre_id]
+    return {
+        "id": release.id,
+        "title": release.name,
+        "year": release.year,
+        "artist": release.artist,
+        "label": release.label,
+        "main_genre": release.main_genre.name if release.main_genre else None,
+        "subgenres": subgenres,
+        "note": latest_review.text if latest_review else None,
+        "rating": release.rating,
+        "score": round(release.rating / 10, 1),
+        "runtime": format_runtime(release.runtime),
+        "track_count": release.track_count,
+        "art_key": initials(release.artist.name if release.artist else release.name),
+        "has_art": image_exists("release", release.id),
+    }
+
+
+def build_day_groups(releases: list[models.Release]) -> list[dict]:
+    """
+    Group releases by listen date (newest first) for the home page feed.
+
+    Returns:
+        list[dict]: Each dict has "label" (e.g. "TODAY · SAT 12 SEP"), "meta"
+        (e.g. "2 releases · 1h 20m"), and "items" (list of entry dicts).
+    """
+    today = datetime.now().date()
+    ordered = sorted(releases, key=lambda r: r.listen_date, reverse=True)
+    groups = []
+    for day, day_releases in groupby(ordered, key=lambda r: r.listen_date.date()):
+        day_releases = list(day_releases)
+        total_minutes = round(sum(r.runtime or 0 for r in day_releases) / 60000)
+        noun = "release" if len(day_releases) == 1 else "releases"
+        hours, minutes = divmod(total_minutes, 60)
+        duration = f"{hours}h {minutes}m" if hours else f"{minutes}m"
+        groups.append(
+            {
+                "label": day_label(day, today),
+                "meta": f"{len(day_releases)} {noun} · {duration}",
+                "items": [build_entry(r) for r in day_releases],
+            }
+        )
+    return groups
 
 
 def get_manual_release_data(data) -> dict:
@@ -93,32 +177,60 @@ def register_routes(app):
     @app.route("/", methods=["GET"])
     @app.route("/home", methods=["GET"])
     def home() -> str:
-        stats_data = get_all_stats()
         active_goals = models.Goal.get_incomplete()
-        goal_data = []
-        if active_goals is not None:
-            goal_data = [process_goal_data(goal) for goal in active_goals]
-        year = datetime.now().year
+        goal = None
+        if active_goals:
+            goal = process_goal_data(active_goals[0])
+            current_pace = models.Release.added_per_day_this_year()
+            goal["on_track"] = current_pace >= goal["target"]
+
+        this_year = {
+            "count": models.Release.added_this_year(),
+            "new_artists": models.Artist.added_this_year(),
+            "new_labels": models.Label.added_this_year(),
+            "listening_time": models.Release.runtime_this_year(),
+            "average_score": round(models.Release.average_rating_this_year() / 10, 1),
+            "pace": models.Release.added_per_day_this_year(),
+        }
+
+        distribution = models.Release.rating_distribution()
+        max_bucket = max(distribution["buckets"]) or 1
+        score_spread = [
+            {
+                "pct": round((count / max_bucket) * 100),
+                "is_peak": count == max_bucket and count > 0,
+            }
+            for count in distribution["buckets"]
+        ]
+
+        on_repeat = models.Artist.on_repeat(days=90, limit=3)
+        for entity in on_repeat:
+            entity["has_art"] = image_exists("artist", entity["id"])
+            entity["art_key"] = initials(entity["name"])
+
         return render_template(
             "index.html",
-            stats=stats_data,
-            goals=goal_data,
-            year=year,
+            this_year=this_year,
+            goal=goal,
+            score_spread=score_spread,
+            median_score=distribution["median"],
+            on_repeat=on_repeat,
             active_page="home",
         )
 
     @app.route("/home_release_table")
     def home_release_table():
-        data = models.Release.home_data()
+        groups = models.Release.home_data()
+        groups = build_day_groups(groups)
 
         page = Pager.get_page_param(request)
-        paged_data, flask_pagination = Pager.paginate(
-            per_page=5, current_page=page, data=data
+        paged_groups, flask_pagination = Pager.paginate(
+            per_page=4, current_page=page, data=groups
         )
 
         return render_template(
             "home_release_table.html",
-            data=paged_data,
+            groups=paged_groups,
             pagination=flask_pagination,
         )
 
@@ -356,4 +468,5 @@ def process_goal_data(goal: models.Goal):
         "progress": round((current / goal.amount) * 100),
         "target": target,
         "current": current,
+        "days_left": days_left,
     }

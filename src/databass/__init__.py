@@ -1,4 +1,5 @@
 import os
+from datetime import datetime
 from flask import Flask, g
 from flask_assets import Environment, Bundle
 from dotenv import load_dotenv
@@ -71,5 +72,9 @@ def create_app():
         @app.before_request
         def before_request():
             g.app_version = VERSION
+            g.total_logged = Release.total_count()
+            today = datetime.now()
+            g.day_of_year = today.timetuple().tm_yday
+            g.current_year = today.year
 
         return app

@@ -1,29 +1,99 @@
 {% extends '_base.html' %}
+{% import 'includes/components.html' as components %}
 {% block content %}
-    <div id="home" class="pure-g">
-        <div class="pure-u-1 pure-u-lg-4-5">
-            <article>
-                <section id="home_release_table">
-                </section>
-            </article>
+<div class="db-page db-page--home">
+    <main class="home-main">
+
+        <form class="card quick-log" action="/new" method="get">
+            <span class="quick-log__prompt">&rsaquo;</span>
+            <input type="text" name="q" class="quick-log__input" placeholder="log a release — artist, title, or MBID">
+            <div style="display:flex;gap:8px;align-items:center">
+                <span class="quick-log__today">TODAY</span>
+                <button type="submit" class="btn-primary">LOG</button>
+            </div>
+        </form>
+
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px">
+            <h2 class="section-head">Recent listening</h2>
+            <span style="font-size:11px;color:var(--muted-2)">sorted by listen date ↓</span>
         </div>
-        <div class="pure-u-1 pure-u-lg-1-5">
-            <aside id="home_aside">
-                <div class="pure-g">
-                    <div class="pure-u-1 pure-u-md-1-2 pure-u-lg-1">
-                        <section>
-                            {% include 'home_stats.html' %}
-                        </section>
-                    </div>
-                    <div class="pure-u-1 pure-u-md-1-2 pure-u-lg-1">
-                        <section id="home_goals">
-                            {% include 'home_goals.html' %}
-                        </section>
+
+        <div id="home_release_table"></div>
+
+        <button id="load-earlier" class="btn-ghost" style="align-self:flex-start" data-page="1">LOAD EARLIER ↓</button>
+    </main>
+
+    <aside class="home-aside">
+
+        <section class="card">
+            <div class="aside-card__title">THIS YEAR</div>
+            <div class="aside-card__hero">
+                <span class="aside-card__hero-num">{{ this_year.count }}</span>
+                <span class="aside-card__hero-unit">releases</span>
+            </div>
+            <dl class="kv-grid">
+                <dt>new artists</dt><dd>{{ this_year.new_artists }}</dd>
+                <dt>new labels</dt><dd>{{ this_year.new_labels }}</dd>
+                <dt>listening time</dt><dd>{{ this_year.listening_time }}h</dd>
+                <dt>average score</dt><dd>{{ this_year.average_score }}</dd>
+                <dt>pace</dt><dd class="accent">{{ this_year.pace }} / day</dd>
+            </dl>
+        </section>
+
+        {% if goal %}
+        <section class="card">
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+                <span class="aside-card__title">GOAL</span>
+                {% if goal.on_track %}
+                    <span style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;color:var(--cyan)">ON TRACK</span>
+                {% else %}
+                    <span style="font-size:10.5px;font-weight:700;letter-spacing:0.06em;color:var(--red)">BEHIND PACE</span>
+                {% endif %}
+            </div>
+            <div style="margin-top:10px;font-size:14px">{{ goal.amount }} {{ goal.type }}s in {{ goal.end.strftime('%Y') }}</div>
+            <div style="display:flex;align-items:baseline;gap:6px;margin-top:12px">
+                <span style="font-weight:500;font-size:30px;line-height:1;letter-spacing:-0.04em">{{ goal.progress }}</span>
+                <span style="font-size:12px;color:var(--muted)">% complete</span>
+            </div>
+            <div class="bar-track" style="height:5px;margin-top:12px">
+                <div class="bar-fill bar-fill--cyan" style="width:{{ goal.progress }}%"></div>
+            </div>
+            <dl class="kv-grid">
+                <dt>remaining</dt><dd>{{ goal.amount - goal.current }}</dd>
+                <dt>days left</dt><dd>{{ goal.days_left }}</dd>
+                <dt>needed / day</dt><dd>{{ goal.target }}</dd>
+            </dl>
+        </section>
+        {% endif %}
+
+        <section class="card">
+            <div class="aside-card__title">SCORE SPREAD</div>
+            <div class="score-spread">
+                {% for bucket in score_spread %}
+                <div class="score-spread__bar {% if bucket.is_peak %}is-peak{% endif %}" style="height:{{ bucket.pct }}%"></div>
+                {% endfor %}
+            </div>
+            <div class="score-spread__axis">
+                <span>1</span><span>median {{ median_score }}</span><span>10</span>
+            </div>
+        </section>
+
+        {% if on_repeat %}
+        <section class="card">
+            <div class="aside-card__title">ON REPEAT — 90 DAYS</div>
+            <div style="margin-top:14px">
+                {% for entity in on_repeat %}
+                <div class="repeat-row">
+                    {{ components.art(entity.has_art, '/img/artist/' ~ entity.id, entity.art_key, 'repeat-row__art') }}
+                    <div style="flex:1;min-width:0">
+                        <a href="/artist/{{ entity.id }}" class="repeat-row__name">{{ entity.name }}</a>
+                        <div class="repeat-row__meta">{{ entity.count }} releases · avg {{ entity.average_rating }}</div>
                     </div>
                 </div>
-            </aside>
-        </div>
-
-    </div>
-
+                {% endfor %}
+            </div>
+        </section>
+        {% endif %}
+    </aside>
+</div>
 {% endblock %}

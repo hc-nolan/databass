@@ -1,0 +1,9 @@
+{% macro art(has_art, src, initials_text, class_name='') %}
+<div class="art {{ class_name }}">
+    {% if has_art %}
+        <img src="{{ src }}" alt="">
+    {% else %}
+        <span class="art__initials">{{ initials_text }}</span>
+    {% endif %}
+</div>
+{% endmacro %}

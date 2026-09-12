@@ -249,7 +249,10 @@ class Release(MusicBrainzEntity):
         "Genre", secondary=release_genre_association, back_populates="releases"
     )
     reviews = relationship(
-        "Review", cascade="all, delete-orphan", back_populates="release"
+        "Review",
+        cascade="all, delete-orphan",
+        back_populates="release",
+        order_by="Review.timestamp.desc()",
     )
 
     def __init__(
@@ -404,6 +407,75 @@ class Release(MusicBrainzEntity):
         except Exception:
             return 0
         return results
+
+    @classmethod
+    def runtime_this_year(cls) -> float:
+        """
+        Total listening time, in hours, for releases added this year.
+
+        Returns:
+            float: Total hours, rounded to 1 decimal place. Returns 0.0 on error
+            or if no releases have been added this year.
+        """
+        try:
+            current_year = datetime.now().year
+            total_ms = (
+                app_db.session.query(func.sum(cls.runtime))
+                .filter(extract("year", cls.date_added) == current_year)
+                .scalar()
+            )
+            if not total_ms:
+                return 0.0
+            return round(total_ms / 3600000, 1)
+        except Exception:
+            return 0.0
+
+    @classmethod
+    def average_rating_this_year(cls) -> float:
+        """
+        Average rating (0-100 scale) for releases added this year.
+
+        Returns:
+            float: Average rating, rounded to 1 decimal place. Returns 0.0 on error
+            or if no releases have been added this year.
+        """
+        try:
+            current_year = datetime.now().year
+            avg = (
+                app_db.session.query(func.avg(cls.rating))
+                .filter(extract("year", cls.date_added) == current_year)
+                .scalar()
+            )
+            return round(avg or 0, 1)
+        except Exception:
+            return 0.0
+
+    @classmethod
+    def rating_distribution(cls) -> dict:
+        """
+        Buckets every release rating (stored 0-100) into ten deciles for a
+        histogram, and calculates the median.
+
+        Returns:
+            dict: {
+                "buckets": list[int] of length 10, index 0 = ratings 0-9, ... index 9 = ratings 90-100,
+                "median": float, the median rating on the 0-10 display scale,
+            }
+        """
+        ratings = [row[0] for row in app_db.session.query(cls.rating).all()]
+        buckets = [0] * 10
+        if not ratings:
+            return {"buckets": buckets, "median": 0.0}
+        for rating in ratings:
+            buckets[min(rating // 10, 9)] += 1
+        sorted_ratings = sorted(ratings)
+        count = len(sorted_ratings)
+        mid = count // 2
+        if count % 2 == 0:
+            median = (sorted_ratings[mid - 1] + sorted_ratings[mid]) / 2
+        else:
+            median = sorted_ratings[mid]
+        return {"buckets": buckets, "median": round(median / 10, 1)}
 
     @classmethod
     def dynamic_search(cls, data: dict) -> list[Release]:
@@ -617,6 +689,57 @@ class ArtistOrLabel(MusicBrainzEntity):
             for result in query
         ]
         return results
+
+    @classmethod
+    def on_repeat(cls, days: int = 90, limit: int = 3) -> list[dict]:
+        """
+        Retrieve the entities (Artists or Labels) listened to most often within
+        the last `days` days, along with their release count and average rating
+        in that window.
+
+        Args:
+            days (int): Size of the trailing window, in days. Defaults to 90.
+            limit (int): Maximum number of entities to return. Defaults to 3.
+
+        Returns:
+            list[dict]: Each dict has "id", "name", "image", "count", and
+            "average_rating" (0-10 scale, one decimal). Empty list on error.
+        """
+        from datetime import timedelta
+
+        relation_id = (
+            Release.artist_id if cls.__tablename__ == "artist" else Release.label_id
+        )
+        cutoff = datetime.now() - timedelta(days=days)
+        try:
+            query = (
+                app_db.session.query(
+                    cls.id,
+                    cls.name,
+                    cls.image,
+                    func.count(Release.id).label("count"),
+                    func.avg(Release.rating).label("average_rating"),
+                )
+                .join(Release, relation_id == cls.id)
+                .where(cls.name.notin_(["[NONE]", "Various Artists", "", "[no label]"]))
+                .where(Release.listen_date >= cutoff)
+                .group_by(cls.id, cls.name, cls.image)
+                .order_by(func.count(Release.id).desc())
+                .limit(limit)
+                .all()
+            )
+        except Exception:
+            return []
+        return [
+            {
+                "id": row.id,
+                "name": row.name,
+                "image": row.image,
+                "count": row.count,
+                "average_rating": round((row.average_rating or 0) / 10, 1),
+            }
+            for row in query
+        ]
 
     @classmethod
     def average_ratings_and_total_counts(

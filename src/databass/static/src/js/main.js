@@ -163,12 +163,21 @@ function getTargetPage(direction) {
     return targetPage
 }
 
-function loadHomeTable(direction) {
-    let targetPage = getTargetPage(direction);
-    fetch('/home_release_table?page=' + targetPage)
+function loadHomeTable(page, append) {
+    fetch('/home_release_table?page=' + page)
         .then(response => response.text())
         .then(html => {
-            document.getElementById('home_release_table').innerHTML = html;
+            const container = document.getElementById('home_release_table');
+            if (append) {
+                container.insertAdjacentHTML('beforeend', html);
+            } else {
+                container.innerHTML = html;
+            }
+            const hasNext = document.getElementById('home-has-next');
+            const loadMoreBtn = document.getElementById('load-earlier');
+            if (loadMoreBtn) {
+                loadMoreBtn.style.display = (hasNext && hasNext.value === '1') ? '' : 'none';
+            }
         });
 }
 
@@ -225,15 +234,15 @@ function loadSearchTable(type, direction) {
 
 document.addEventListener('DOMContentLoaded', () => {
     if (window.location.pathname === "/" || window.location.pathname === "/home") {
-        loadHomeTable();
-        document.addEventListener('click', function(event) {
-            if (event.target.classList.contains('prev_page')) {
-                loadHomeTable('prev')
-            }
-            if (event.target.classList.contains('next_page')) {
-                loadHomeTable('next')
-            }
-        });
+        loadHomeTable(1, false);
+        const loadMoreBtn = document.getElementById('load-earlier');
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', function() {
+                const pageField = document.getElementById('home-page');
+                const currentPage = pageField ? parseInt(pageField.value, 10) || 1 : 1;
+                loadHomeTable(currentPage + 1, true);
+            });
+        }
     }
 
     if (window.location.pathname === "/new") {
