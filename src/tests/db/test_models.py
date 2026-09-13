@@ -233,7 +233,7 @@ class TestMusicBrainzEntityExistsByMbid:
     def test_exists_by_mbid_returns_none_for_nonexistent_mbid(self, mocker):
         """Test that exists_by_mbid returns None when no matching MBID is found"""
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
-        mock_query.return_value.filter.return_value.one_or_none.return_value = None
+        mock_query.return_value.filter.return_value.first.return_value = None
 
         result = Release.exists_by_mbid("non-existent-mbid")
         assert result is None
@@ -243,7 +243,7 @@ class TestMusicBrainzEntityExistsByMbid:
         """Test that exists_by_mbid returns the entity when a matching MBID is found"""
         mock_entity = mocker.Mock()
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
-        mock_query.return_value.filter.return_value.one_or_none.return_value = (
+        mock_query.return_value.filter.return_value.first.return_value = (
             mock_entity
         )
 
@@ -266,7 +266,7 @@ class TestMusicBrainzEntityExistsByMbid:
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
         mock_filter = mocker.Mock()
         mock_query.return_value.filter = mock_filter
-        mock_filter.return_value.one_or_none.return_value = None
+        mock_filter.return_value.first.return_value = None
 
         Release.exists_by_mbid("test-mbid")
 
@@ -278,7 +278,7 @@ class TestMusicBrainzEntityExistsByMbid:
         """Test that exists_by_mbid handles MBIDs with whitespace correctly"""
         mock_entity = mocker.Mock()
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
-        mock_query.return_value.filter.return_value.one_or_none.return_value = (
+        mock_query.return_value.filter.return_value.first.return_value = (
             mock_entity
         )
 

@@ -12,6 +12,7 @@ from sqlalchemy import (
     func,
     extract,
     distinct,
+    or_,
     Table,
     Column,
     CheckConstraint,
@@ -238,6 +239,10 @@ class MusicBrainzEntity(Base):
 
 class Release(MusicBrainzEntity):
     __tablename__ = "release"
+    # Overrides MusicBrainzEntity.mbid: unlike Artist/Label, the same release
+    # can legitimately be logged (relistened to) more than once, so its MBID
+    # must not be unique here.
+    mbid: Mapped[str | None] = mapped_column(String, unique=False, nullable=True)
     artist_id: Mapped[int] = mapped_column(ForeignKey("artist.id"))
     label_id: Mapped[int] = mapped_column(ForeignKey("label.id"))
     year: Mapped[int] = mapped_column(Integer)
@@ -438,6 +443,23 @@ class Release(MusicBrainzEntity):
         )
 
     @classmethod
+    def exists_by_mbid(cls, mbid: str) -> Optional[Release]:
+        """
+        Overrides MusicBrainzEntity.exists_by_mbid: since a release's MBID is
+        no longer unique (the same release can be logged/relistened to more
+        than once), use `.first()` instead of `.one_or_none()` so a second
+        logged listen of the same release doesn't raise MultipleResultsFound.
+        """
+        if not mbid or not isinstance(mbid, str):
+            return None
+        try:
+            result = app_db.session.query(cls).filter(cls.mbid == mbid).first()
+        except Exception:
+            app_db.session.rollback()
+            return None
+        return result or None
+
+    @classmethod
     def listens_this_year(cls) -> int:
         """
         Counts the number of releases listened to during the current year.
@@ -579,6 +601,62 @@ class Release(MusicBrainzEntity):
                 query = query.filter(getattr(cls, key) == value)
         results = query.order_by(cls.id).all()
         return results
+
+    @classmethod
+    def browse_search(
+        cls,
+        q: str = "",
+        country: str = "",
+        genre: str = "",
+        year_min: Optional[int] = None,
+        rating_min: Optional[int] = None,
+        sort: str = "listened",
+        page: int = 1,
+        per_page: int = 30,
+    ) -> tuple[list[Release], int]:
+        """
+        Search, filter, sort, and paginate releases at the SQL level for the
+        Browse page.
+
+        Only the current page's rows are hydrated with relationships
+        (artist, label, main_genre); filtering/sorting/counting all run
+        against the full table without loading it into Python.
+
+        Returns:
+            tuple[list[Release], int]: (releases for the requested page,
+            total count of releases matching the filters).
+        """
+        query = app_db.session.query(cls.id)
+        if q:
+            artist_ids = Artist.id_by_matching_name(q)
+            query = query.filter(
+                or_(cls.name.ilike(f"%{q}%"), cls.artist_id.in_(artist_ids))
+            )
+        if country:
+            query = query.filter(cls.country == country)
+        if genre:
+            query = query.filter(cls.main_genre.has(name=genre))
+        if year_min:
+            query = query.filter(cls.year >= year_min)
+        if rating_min:
+            query = query.filter(cls.rating >= rating_min)
+
+        total = query.count()
+
+        sort_map = {
+            "listened": cls.listen_date.desc(),
+            "rating": cls.rating.desc(),
+            "year": cls.year.desc(),
+            "az": cls.name.asc(),
+        }
+        query = query.order_by(sort_map.get(sort, sort_map["listened"]))
+
+        ids = [
+            row.id
+            for row in query.offset((page - 1) * per_page).limit(per_page).all()
+        ]
+        releases_by_id = {r.id: r for r in cls.by_ids(ids)}
+        return [releases_by_id[i] for i in ids if i in releases_by_id], total
 
     @classmethod
     def get_reviews(
@@ -833,6 +911,72 @@ class ArtistOrLabel(MusicBrainzEntity):
         except Exception:
             return []
         return entities
+
+    @classmethod
+    def browse_search(
+        cls,
+        q: str = "",
+        country: str = "",
+        type_: str = "",
+        releases_min: Optional[int] = None,
+        rating_min: Optional[int] = None,
+        sort: str = "releases",
+        page: int = 1,
+        per_page: int = 30,
+    ) -> tuple[list[Row], int]:
+        """
+        Search, filter, sort, and paginate Artists or Labels at the SQL
+        level for the Browse page, joined with each entity's release count
+        and average rating.
+
+        Returns:
+            tuple[list[Row], int]: (rows for the requested page, total count
+            of entities matching the filters). Each row has id, name, image,
+            country, type, release_count, average_rating.
+        """
+        if cls.__tablename__ == "artist":
+            relation_id = Release.artist_id
+        elif cls.__tablename__ == "label":
+            relation_id = Release.label_id
+        else:
+            raise TypeError("Method only supported by Artist and Label classes.")
+
+        query = (
+            app_db.session.query(
+                cls.id,
+                cls.name,
+                cls.image,
+                cls.country,
+                cls.type,
+                func.count(Release.id).label("release_count"),
+                func.avg(Release.rating).label("average_rating"),
+            )
+            .join(Release, relation_id == cls.id)
+            .where(cls.name.notin_(["[NONE]", "Various Artists", "", "[no label]"]))
+            .group_by(cls.id, cls.name, cls.image, cls.country, cls.type)
+        )
+        if q:
+            query = query.filter(cls.name.ilike(f"%{q}%"))
+        if country:
+            query = query.filter(cls.country == country)
+        if type_:
+            query = query.filter(cls.type == type_)
+        if releases_min:
+            query = query.having(func.count(Release.id) >= releases_min)
+        if rating_min:
+            query = query.having(func.avg(Release.rating) >= rating_min)
+
+        total = query.count()
+
+        sort_map = {
+            "releases": func.count(Release.id).desc(),
+            "rating": func.avg(Release.rating).desc(),
+            "az": cls.name.asc(),
+        }
+        query = query.order_by(sort_map.get(sort, sort_map["releases"]))
+
+        rows = query.offset((page - 1) * per_page).limit(per_page).all()
+        return rows, total
 
     @classmethod
     def average_ratings_bayesian(
