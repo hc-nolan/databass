@@ -703,6 +703,274 @@ select {
 }
 
 /* ==========================================================================
+   New Listen page
+   ========================================================================== */
+.new-main {
+  flex: 1 1 560px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.new-search {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.new-search__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.new-search__fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.new-search__field {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+.new-search__field--wide {
+  flex: 2 1 200px;
+}
+.new-search__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted-2);
+}
+
+.new-aside {
+  flex: 1 1 340px;
+  min-width: 300px;
+  position: sticky;
+  top: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.new-aside__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.new-aside__hint {
+  font-size: 10.5px;
+  color: var(--muted-2);
+}
+
+.log-panel__empty {
+  padding: 28px 16px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 10px;
+  text-align: center;
+  color: var(--muted-2);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+.log-panel__form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.log-panel__release {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+}
+.log-panel__art {
+  width: 64px;
+  height: 64px;
+  border-radius: 5px;
+}
+.log-panel__release-info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.log-panel__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+.log-panel__artist {
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.log-panel__subline {
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.log-panel__group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.log-panel__row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+.log-panel__rating-label {
+  font-size: 12px;
+  color: var(--muted);
+}
+.log-panel__rating {
+  width: 100%;
+}
+.log-panel__rating .segmented__item {
+  flex: 1;
+  height: 30px;
+  padding: 0;
+}
+.log-panel__hint {
+  font-size: 10.5px;
+  color: var(--muted-2);
+}
+.log-panel__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.log-panel__label-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.log-panel__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.log-panel__note {
+  font-style: italic;
+  resize: vertical;
+}
+.log-panel__actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.log-panel__save {
+  flex: 1;
+}
+.log-panel__nudge {
+  font-size: 10.5px;
+  color: var(--muted-2);
+  text-align: center;
+}
+
+.new-results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.new-results__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+  font-size: 11px;
+  color: var(--muted-2);
+}
+.new-results__meta-sep {
+  color: oklch(0.34 0.01 70);
+}
+.result-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+}
+.result-row:hover {
+  border-color: var(--border-hover);
+}
+.result-row.is-selected {
+  border-color: var(--amber);
+  background: oklch(0.22 0.012 70);
+}
+.result-row--logged {
+  opacity: 0.85;
+}
+.result-row__art {
+  width: 52px;
+  height: 52px;
+}
+.result-row__body {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.result-row__title-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+}
+.result-row__title {
+  font-size: 14.5px;
+  font-weight: 500;
+}
+.result-row__credit-line {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.result-row__sep {
+  color: oklch(0.36 0.01 70);
+}
+.result-row__meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 14px;
+  font-size: 11.5px;
+  color: var(--muted-2);
+}
+.result-row__format {
+  min-width: 78px;
+  text-align: right;
+}
+
+.manual-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.manual-entry__heading {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted-2);
+}
+.manual-entry__form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.manual-entry__note {
+  font-style: italic;
+  resize: vertical;
+}
+.manual-entry__submit {
+  align-self: flex-start;
+}
+
+/* ==========================================================================
    Legacy page styles (screens not yet migrated to v0.7)
    Still reference the --white/--black/--grey aliases defined above so they
    inherit the new palette without a full rewrite.

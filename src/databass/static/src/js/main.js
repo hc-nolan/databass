@@ -45,111 +45,6 @@ function handleEditButton(editButton) {
         })
 }
 
-function formatDataString(data) {
-    // Escape parts of response data that cause JSON.parse to error
-    // Some of these are extremely case specific; ideally should be more generalized
-    // i.e
-    // .replace(/ "n/g, " 'n") = Drum "n' Bass -> Drum 'n' Bass
-    // .replace(/ "n' /g, " 'n' ") = Neu! "75 -> Neu! '75
-    // Both of the above cases are caused by the other more generic replacements
-    // Way to avoid most of this altogether would be to just URLencode key/value pairs
-    return data
-        .replace(/None/g, 'null')
-        .replace(/{'/g, '{"')
-        .replace(/'}/g, '"}')
-        .replace(/':/g, '":')
-        .replace(/ '/g, ' "')
-        .replace(/',/g, '",')
-        .replace(/ "n' /g, " 'n' ")
-        .replace(/\['/g, '\["')
-        .replace(/'\]/g, '"\]')
-        .replace(/! "75/g, "! '75'")
-        .replace(/(12|10|7)" Vinyl/g, '$1\\" Vinyl');
-}
-
-function addPopupListeners(html) {
-    document.getElementById("search_results").innerHTML = html;
-    let tableRows = document.querySelectorAll(".row");
-    tableRows.forEach((tableRow) => {
-        tableRow.addEventListener("click", function() {
-            let data = formatDataString(tableRow.dataset.item);
-            let parsed_data = JSON.parse(data)
-            fetch("/new_release", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(parsed_data)
-            })
-                .then(response => response.text())
-                .then(html => {
-                    let popup = document.createElement('div')
-                    popup.className = 'popup';
-                    popup.innerHTML = html;
-                    document.body.appendChild(popup);
-                    popup.querySelector('.close-btn').addEventListener('click', function() {
-                        document.body.removeChild(popup);
-                    });
-                })
-                .catch(err => { console.log(err) })
-        });
-    });
-}
-
-function handleSearchButton() {
-    let page;
-    try {
-        page = document.querySelector('#current_page').value;
-    } catch(e) {
-        page = "1";
-    }
-    let referrer;
-    try {
-        referrer = document.querySelector("#referrer").value;
-    } catch(e) {
-        referrer = "search"
-    }
-    const data = {
-        release: document.querySelector("#release").value,
-        artist: document.querySelector("#artist").value,
-        label: document.querySelector("#label").value,
-        "referrer": referrer,
-        "page": page
-    };
-    fetch('/search', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.text())
-    .then(html => {
-        // add event listener to each table row
-        addPopupListeners(html);
-    })
-    .catch(error => {
-        console.error('Fetch error:', error);
-    });
-}
-
-function loadSearchResults(direction) {
-    let targetPage = getTargetPage(direction);
-    let data = document.getElementById("data_full").innerHTML;
-    let formattedData = formatDataString(data);
-    let parsedData = JSON.parse(formattedData);
-    fetch('/search_results?page=' + targetPage, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(parsedData)
-    })
-        .then(response => response.text())
-        .then(html => {
-            addPopupListeners(html);
-            // document.getElementById('search_results').innerHTML = html;
-        });
-}
-
 function getTargetPage(direction) {
     let currentPage;
     try {
@@ -232,6 +127,186 @@ function loadSearchTable(type, direction) {
         })
 }
 
+function initNewListenPage() {
+    const releaseInput = document.querySelector('#release');
+    const artistInput = document.querySelector('#artist');
+    const labelInput = document.querySelector('#label');
+    const searchBtn = document.querySelector('#search-btn');
+    const manualToggle = document.querySelector('#manual-entry-toggle');
+    const resultsContainer = document.querySelector('#search_results');
+    const logForm = document.querySelector('#log-form');
+    const logEmpty = document.querySelector('#log-panel-empty');
+    const listenDateInput = document.querySelector('#lf-listen-date');
+    const defaultListenDate = listenDateInput.value;
+    const ratingWords = ["", "actively bad", "didn't work", "flat", "thin", "fine", "solid", "really good", "excellent", "near-perfect", "all-timer"];
+    let subgenres = [];
+
+    function runSearch() {
+        const release = releaseInput.value.trim();
+        const artist = artistInput.value.trim();
+        const label = labelInput.value.trim();
+        if (!release && !artist && !label) return;
+        fetch('/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                release: release || null,
+                artist: artist || null,
+                label: label || null,
+            }),
+        })
+            .then(response => response.text())
+            .then(html => { resultsContainer.innerHTML = html; })
+            .catch(err => console.error('Search failed:', err));
+    }
+
+    function loadManualEntry() {
+        fetch('/search', { method: 'GET' })
+            .then(response => response.text())
+            .then(html => { resultsContainer.innerHTML = html; })
+            .catch(err => console.error('Manual entry load failed:', err));
+    }
+
+    function updateRatingUI(rating) {
+        document.querySelectorAll('#lf-rating-segmented .segmented__item').forEach(btn => {
+            btn.classList.toggle('is-active', parseInt(btn.dataset.rating, 10) <= rating);
+        });
+        document.querySelector('#lf-rating').value = rating * 10;
+        document.querySelector('#lf-rating-label').textContent = rating.toFixed(1) + ' / 10';
+        document.querySelector('#lf-rating-hint').textContent =
+            ratingWords[rating] + ' · stored as ' + (rating * 10) + '%';
+    }
+
+    function syncGenreSuggestions() {
+        document.querySelectorAll('#lf-genre-suggestions [data-genre-suggestion]').forEach(chip => {
+            chip.classList.toggle('is-selected', subgenres.includes(chip.dataset.genreSuggestion));
+        });
+    }
+
+    function renderSubgenreChips() {
+        const container = document.querySelector('#lf-subgenre-chips');
+        container.innerHTML = '';
+        subgenres.forEach(name => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'chip is-selected';
+            chip.textContent = name + ' ×';
+            chip.addEventListener('click', () => {
+                subgenres = subgenres.filter(g => g !== name);
+                syncGenreSuggestions();
+                renderSubgenreChips();
+            });
+            container.appendChild(chip);
+        });
+        document.querySelector('#lf-genres').value = subgenres.join(',');
+    }
+
+    function addSubgenre(name) {
+        name = name.trim();
+        if (!name || subgenres.includes(name)) return;
+        subgenres.push(name);
+        syncGenreSuggestions();
+        renderSubgenreChips();
+    }
+
+    function selectResult(row) {
+        let item;
+        try {
+            item = JSON.parse(row.dataset.item);
+        } catch (e) {
+            console.error('Failed to parse result data', e);
+            return;
+        }
+        document.querySelectorAll('.result-row').forEach(r => r.classList.remove('is-selected'));
+        row.classList.add('is-selected');
+
+        document.querySelector('#lf-release_group_id').value = item.release_group_id || '';
+        document.querySelector('#lf-release_name').value = item.release.name || '';
+        document.querySelector('#lf-artist').value = item.artist.name || '';
+        document.querySelector('#lf-label').value = item.label.name || '';
+        document.querySelector('#lf-release_mbid').value = item.release.mbid || '';
+        document.querySelector('#lf-artist_mbid').value = item.artist.mbid || '';
+        document.querySelector('#lf-label_mbid').value = item.label.mbid || '';
+        document.querySelector('#lf-track_count').value = item.track_count || 0;
+        document.querySelector('#lf-country').value = item.country || '';
+        document.querySelector('#lf-year').value = item.date || 0;
+
+        document.querySelector('#lf-title-display').textContent = item.release.name || '';
+        document.querySelector('#lf-artist-display').textContent = item.artist.name || '';
+        document.querySelector('#lf-subline-display').textContent =
+            [item.label.name, item.date, item.format, item.country].filter(Boolean).join(' · ');
+        document.querySelector('#lf-tracks-display').value = item.track_count || '';
+
+        logEmpty.hidden = true;
+        logForm.hidden = false;
+        document.querySelector('#lf-main-genre').focus();
+    }
+
+    searchBtn.addEventListener('click', runSearch);
+    [releaseInput, artistInput, labelInput].forEach(input => {
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                runSearch();
+            }
+        });
+    });
+    manualToggle.addEventListener('click', loadManualEntry);
+
+    resultsContainer.addEventListener('click', e => {
+        const row = e.target.closest('.result-row');
+        if (row) selectResult(row);
+    });
+    resultsContainer.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        const row = e.target.closest('.result-row');
+        if (row) selectResult(row);
+    });
+
+    document.querySelector('#lf-rating-segmented').addEventListener('click', e => {
+        const btn = e.target.closest('[data-rating]');
+        if (btn) updateRatingUI(parseInt(btn.dataset.rating, 10));
+    });
+
+    document.querySelector('#lf-genre-suggestions').addEventListener('click', e => {
+        const chip = e.target.closest('[data-genre-suggestion]');
+        if (!chip) return;
+        const name = chip.dataset.genreSuggestion;
+        if (subgenres.includes(name)) {
+            subgenres = subgenres.filter(g => g !== name);
+        } else {
+            subgenres.push(name);
+        }
+        syncGenreSuggestions();
+        renderSubgenreChips();
+    });
+
+    document.querySelector('#lf-subgenre-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addSubgenre(e.target.value);
+            e.target.value = '';
+        }
+    });
+
+    document.querySelector('#lf-clear').addEventListener('click', () => {
+        updateRatingUI(7);
+        subgenres = [];
+        syncGenreSuggestions();
+        renderSubgenreChips();
+        document.querySelector('#lf-note').value = '';
+        listenDateInput.value = defaultListenDate;
+    });
+
+    updateRatingUI(7);
+
+    const initialQuery = document.querySelector('#new-q');
+    if (initialQuery && initialQuery.value) {
+        releaseInput.value = initialQuery.value;
+        runSearch();
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     if (window.location.pathname === "/" || window.location.pathname === "/home") {
         loadHomeTable(1, false);
@@ -246,37 +321,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (window.location.pathname === "/new") {
-        document.addEventListener('click', function(event) {
-            if (event.target && event.target.classList.contains('manual_entry')) {
-                event.preventDefault();
-                fetch('/search', {
-                    method: 'GET'
-                })
-                    .then(response => response.text())
-                    .then(html => {
-            document.getElementById('search_results').innerHTML = html;
-                    })
-                    .catch(error => {
-                        console.error('Fetch error:', error);
-                    });
-            }
-            if (event.target && event.target.classList.contains('new_search')) {
-                handleSearchButton();
-                document.addEventListener('click', function(event) {
-                    if (event.target.classList.contains('prev_page')) {
-                        loadSearchResults('prev')
-                    }
-                    if (event.target.classList.contains('next_page')) {
-                        loadSearchResults('next')
-                    }
-                });
-            }
-        });
-        document.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter') {
-                handleSearchButton();
-            }
-        });
+        initNewListenPage();
     }
 
     if (window.location.pathname === "/releases") {

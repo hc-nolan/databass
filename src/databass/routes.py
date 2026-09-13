@@ -86,28 +86,29 @@ def build_entry(release: models.Release) -> dict:
     }
 
 
-def build_day_groups(releases: list[models.Release]) -> list[dict]:
+def build_day_groups(rows: list) -> list[dict]:
     """
-    Group releases by listen date (newest first) for the home page feed.
+    Group lightweight (id, listen_date, runtime) rows by listen date (newest
+    first) for the home page feed, without touching any relationships.
 
     Returns:
         list[dict]: Each dict has "label" (e.g. "TODAY · SAT 12 SEP"), "meta"
-        (e.g. "2 releases · 1h 20m"), and "items" (list of entry dicts).
+        (e.g. "2 releases · 1h 20m"), and "ids" (release IDs in that group).
     """
     today = datetime.now().date()
-    ordered = sorted(releases, key=lambda r: r.listen_date, reverse=True)
+    ordered = sorted(rows, key=lambda r: r.listen_date, reverse=True)
     groups = []
-    for day, day_releases in groupby(ordered, key=lambda r: r.listen_date.date()):
-        day_releases = list(day_releases)
-        total_minutes = round(sum(r.runtime or 0 for r in day_releases) / 60000)
-        noun = "release" if len(day_releases) == 1 else "releases"
+    for day, day_rows in groupby(ordered, key=lambda r: r.listen_date.date()):
+        day_rows = list(day_rows)
+        total_minutes = round(sum(r.runtime or 0 for r in day_rows) / 60000)
+        noun = "release" if len(day_rows) == 1 else "releases"
         hours, minutes = divmod(total_minutes, 60)
         duration = f"{hours}h {minutes}m" if hours else f"{minutes}m"
         groups.append(
             {
                 "label": day_label(day, today),
-                "meta": f"{len(day_releases)} {noun} · {duration}",
-                "items": [build_entry(r) for r in day_releases],
+                "meta": f"{len(day_rows)} {noun} · {duration}",
+                "ids": [r.id for r in day_rows],
             }
         )
     return groups
@@ -138,11 +139,12 @@ def get_manual_release_data(data) -> dict:
         "rating": data.get("rating"),
         "genres": genres,
         "image": image,
-        "listen_date": Util.today(),
+        "listen_date": Util.to_date(None, data.get("listen_date") or Util.today()),
         "runtime": runtime,
         "track_count": track_count,
         "country": country,
         "release_group_mbid": None,
+        "note": data.get("note") or None,
     }
 
 
@@ -166,10 +168,11 @@ def get_release_data(data) -> dict:
         "main_genre": data.get("main_genre"),
         "rating": int(data.get("rating")),
         "track_count": data.get("track_count"),
-        "listen_date": Util.today(),
+        "listen_date": Util.to_date(None, data.get("listen_date") or Util.today()),
         "country": data.get("country"),
         "genres": data.get("genres"),
         "image": None,
+        "note": data.get("note") or None,
     }
 
 
@@ -220,13 +223,24 @@ def register_routes(app):
 
     @app.route("/home_release_table")
     def home_release_table():
-        groups = models.Release.home_data()
-        groups = build_day_groups(groups)
+        rows = models.Release.home_data_light()
+        groups = build_day_groups(rows)
 
         page = Pager.get_page_param(request)
         paged_groups, flask_pagination = Pager.paginate(
             per_page=4, current_page=page, data=groups
         )
+
+        # Only hydrate full entries (with relationships + art lookups) for
+        # releases on the current page, rather than the whole library.
+        page_ids = [id_ for group in paged_groups for id_ in group["ids"]]
+        releases_by_id = {r.id: r for r in models.Release.by_ids(page_ids)}
+        for group in paged_groups:
+            group["items"] = [
+                build_entry(releases_by_id[id_])
+                for id_ in group["ids"]
+                if id_ in releases_by_id
+            ]
 
         return render_template(
             "home_release_table.html",
@@ -236,21 +250,29 @@ def register_routes(app):
 
     @app.route("/new")
     def new():
-        return render_template("new.html", active_page="new")
+        q = request.args.get("q", "").strip()
+        all_genres = sorted(models.Genre.get_distinct_column_values("name"))
+        goal_nudge = None
+        active_goals = models.Goal.get_incomplete()
+        if active_goals:
+            g_data = process_goal_data(active_goals[0])
+            remaining = max(g_data["amount"] - g_data["current"], 0)
+            goal_nudge = (
+                f"{remaining} to go on your {g_data['end'].year} {g_data['type']} goal"
+            )
+        return render_template(
+            "new.html",
+            active_page="new",
+            q=q,
+            all_genres=all_genres,
+            goal_nudge=goal_nudge,
+            today=Util.today(),
+        )
 
     @app.route("/search", methods=["POST", "GET"])
     def search() -> str | flask.Response:
-        page = paged_data = release_data = per_page = None
-
         if request.method == "GET":
-            return render_template(
-                "search.html",
-                page=page,
-                data=paged_data,
-                pagination=None,
-                data_full=release_data,
-                per_page=per_page,
-            )
+            return render_template("new_manual_entry.html")
 
         data = request.get_json()
         search_release = data.get("release")
@@ -265,35 +287,14 @@ def register_routes(app):
         release_data = MusicBrainz.release_search(
             release=search_release, artist=search_artist, label=search_label
         )
-        page = Pager.get_page_param(request)
-        paged_data, flask_pagination = Pager.paginate(
-            per_page=10, current_page=page, data=release_data
-        )
-        return render_template(
-            "search.html",
-            page=page,
-            data=paged_data,
-            pagination=flask_pagination,
-            data_full=release_data,
-            per_page=per_page,
-        )
+        results = []
+        for item in release_data:
+            mbid = item["release"].get("mbid")
+            logged = bool(mbid and models.Release.exists_by_mbid(mbid))
+            artist_name = item["artist"].get("name") or item["release"].get("name") or ""
+            results.append({**item, "logged": logged, "initials": initials(artist_name)})
 
-    @app.route("/search_results", methods=["POST"])
-    def search_results():
-        data = request.get_json()
-        per_page = 10
-        page = Pager.get_page_param(request)
-        paged_data, flask_pagination = Pager.paginate(
-            per_page=per_page, current_page=page, data=data
-        )
-        return render_template(
-            "search.html",
-            page=page,
-            data=paged_data,
-            pagination=flask_pagination,
-            data_full=data,
-            per_page=per_page,
-        )
+        return render_template("new_search_results.html", data=results)
 
     @app.route("/submit", methods=["POST"])
     def submit():
@@ -393,11 +394,6 @@ def register_routes(app):
         resp = make_response(send_file(img_path))
         resp.headers["Cache-Control"] = "max-age=600"
         return resp
-
-    @app.route("/new_release", methods=["POST"])
-    def new_release_popup():
-        data = request.get_json()
-        return render_template("new_release_popup.html", data=data)
 
     @app.template_filter("country_name")
     def country_name_filter(code: Optional[str]) -> Optional[str]:

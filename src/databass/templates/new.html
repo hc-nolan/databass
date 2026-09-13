@@ -1,19 +1,120 @@
 {% extends '_base.html' %}
+{% import 'includes/components.html' as components %}
 {% block content %}
-<div id="new_release">
-    <div>
-        <form class="pure-form" action="/search" method="POST">
-            <fieldset>
-                <legend>search for a new release</legend>
-                <input type="text" id="release" name="release" placeholder="release">
-                <input type="text" id="artist" name="artist" placeholder="artist">
-                <input type="text" id="label" name="label" placeholder="label">
+<div class="db-page db-page--new" id="new_release">
+    <main class="new-main">
 
-                <button type="button" class="new_search pure-button" data-action="search" id="search">search</button>
-                <button type="button" class="manual_entry pure-button">manual entry</button>
-            </fieldset>
+        <section class="card new-search">
+            <div class="new-search__head">
+                <span class="eyebrow eyebrow--amber">SEARCH MUSICBRAINZ</span>
+                <button type="button" class="btn-ghost" id="manual-entry-toggle">manual entry</button>
+            </div>
+            <div class="new-search__fields">
+                <input type="text" id="release" class="field new-search__field new-search__field--wide" placeholder="release" value="{{ q }}">
+                <input type="text" id="artist" class="field new-search__field" placeholder="artist">
+                <input type="text" id="label" class="field new-search__field" placeholder="label">
+                <button type="button" class="btn-primary" id="search-btn">SEARCH</button>
+            </div>
+        </section>
+
+        <div id="search_results"></div>
+    </main>
+
+    <aside class="card new-aside" id="log-panel">
+        <div class="new-aside__head">
+            <span class="eyebrow eyebrow--amber">LOG THIS LISTEN</span>
+            <span class="new-aside__hint">&#9166; to save</span>
+        </div>
+
+        <div id="log-panel-empty" class="log-panel__empty">
+            Pick a result to fill this in.<br>Everything below stays editable.
+        </div>
+
+        <form id="log-form" class="log-panel__form" method="POST" action="/submit" hidden>
+            <input type="hidden" name="manual_submit" value="false">
+            <input type="hidden" name="release_group_id" id="lf-release_group_id">
+            <input type="hidden" name="release_name" id="lf-release_name">
+            <input type="hidden" name="artist" id="lf-artist">
+            <input type="hidden" name="label" id="lf-label">
+            <input type="hidden" name="release_mbid" id="lf-release_mbid">
+            <input type="hidden" name="artist_mbid" id="lf-artist_mbid">
+            <input type="hidden" name="label_mbid" id="lf-label_mbid">
+            <input type="hidden" name="track_count" id="lf-track_count">
+            <input type="hidden" name="country" id="lf-country">
+            <input type="hidden" name="year" id="lf-year">
+            <input type="hidden" name="rating" id="lf-rating" value="70">
+            <input type="hidden" name="genres" id="lf-genres" value="">
+
+            <div class="log-panel__release">
+                {{ components.art(false, '', '', 'log-panel__art') }}
+                <div class="log-panel__release-info">
+                    <span class="log-panel__title" id="lf-title-display"></span>
+                    <span class="log-panel__artist" id="lf-artist-display"></span>
+                    <span class="log-panel__subline" id="lf-subline-display"></span>
+                </div>
+            </div>
+
+            <div class="log-panel__group">
+                <div class="log-panel__row">
+                    <span class="field-label" style="margin-bottom:0">RATING</span>
+                    <span class="log-panel__rating-label" id="lf-rating-label">7.0 / 10</span>
+                </div>
+                <div class="segmented log-panel__rating" id="lf-rating-segmented">
+                    {% for n in range(1, 11) %}
+                    <button type="button" class="segmented__item" data-rating="{{ n }}">{{ n }}</button>
+                    {% endfor %}
+                </div>
+                <span class="log-panel__hint" id="lf-rating-hint"></span>
+            </div>
+
+            <div class="log-panel__grid">
+                <label class="log-panel__label-field">
+                    <span class="field-label">LISTENED</span>
+                    <input type="date" id="lf-listen-date" name="listen_date" class="field" value="{{ today }}">
+                </label>
+                <label class="log-panel__label-field">
+                    <span class="field-label">TRACKS</span>
+                    <input type="text" id="lf-tracks-display" class="field" readonly>
+                </label>
+            </div>
+
+            <div class="log-panel__group">
+                <span class="field-label">MAIN GENRE</span>
+                <input type="text" id="lf-main-genre" name="main_genre" class="field" list="genre-suggestions" required placeholder="genre">
+            </div>
+
+            <div class="log-panel__group">
+                <span class="field-label">SUBGENRES</span>
+                <div class="log-panel__chips" id="lf-subgenre-chips"></div>
+                <div class="log-panel__chips" id="lf-genre-suggestions">
+                    {% for g in all_genres[:16] %}
+                    <button type="button" class="chip chip--outline" data-genre-suggestion="{{ g }}">{{ g }}</button>
+                    {% endfor %}
+                </div>
+                <input type="text" id="lf-subgenre-input" class="field" placeholder="+ add subgenre, press enter">
+            </div>
+
+            <label class="log-panel__group">
+                <span class="field-label">NOTE — OPTIONAL</span>
+                <textarea id="lf-note" name="note" rows="3" class="field log-panel__note" placeholder="what did it feel like?"></textarea>
+            </label>
+
+            <div class="log-panel__actions">
+                <button type="submit" class="btn-primary log-panel__save" id="lf-save">SAVE LISTEN</button>
+                <button type="button" class="btn-ghost" id="lf-clear">clear</button>
+            </div>
+            {% if goal_nudge %}
+            <span class="log-panel__nudge">{{ goal_nudge }}</span>
+            {% endif %}
         </form>
-    </div>
-    <div id="search_results"></div>
+    </aside>
 </div>
+
+<datalist id="genre-suggestions">
+    {% for g in all_genres %}
+    <option value="{{ g }}">
+    {% endfor %}
+</datalist>
+
+<input type="hidden" id="new-q" value="{{ q }}">
 {% endblock %}

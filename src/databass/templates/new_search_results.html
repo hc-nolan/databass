@@ -1,0 +1,34 @@
+{% import 'includes/components.html' as components %}
+{% if data %}
+<div id="data_form" class="new-results-list">
+    <div class="new-results__meta">
+        <span>{{ data|length }} result{{ 's' if data|length != 1 else '' }}</span>
+        <span class="new-results__meta-sep">·</span>
+        <span>duplicates of releases you already logged are marked</span>
+    </div>
+    {% for item in data %}
+    <article class="result-row{% if item.logged %} result-row--logged{% endif %}" data-item='{{ item | tojson | safe }}' tabindex="0">
+        {{ components.art(false, '', item.initials, 'result-row__art') }}
+        <div class="result-row__body">
+            <div class="result-row__title-line">
+                <span class="result-row__title">{{ item.release.name }}</span>
+                {% if item.logged %}<span class="badge badge--cyan">ALREADY LOGGED</span>{% endif %}
+            </div>
+            <div class="result-row__credit-line">
+                <span>{{ item.artist.name }}</span>
+                <span class="result-row__sep">/</span>
+                <span>{{ item.label.name }}</span>
+            </div>
+        </div>
+        <div class="result-row__meta">
+            <span>{{ item.date }}</span>
+            <span>{{ item.track_count }} tr</span>
+            <span>{{ item.country }}</span>
+            <span class="result-row__format">{{ item.format }}</span>
+        </div>
+    </article>
+    {% endfor %}
+</div>
+{% else %}
+{% include 'new_manual_entry.html' %}
+{% endif %}

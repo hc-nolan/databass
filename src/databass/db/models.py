@@ -16,7 +16,14 @@ from sqlalchemy import (
     Column,
     CheckConstraint,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import (
+    DeclarativeBase,
+    Mapped,
+    mapped_column,
+    relationship,
+    joinedload,
+    selectinload,
+)
 from sqlalchemy.engine.row import Row
 from .operations import construct_item, insert
 from .base import app_db
@@ -387,6 +394,48 @@ class Release(MusicBrainzEntity):
         except Exception:
             return []
         return results
+
+    @classmethod
+    def home_data_light(cls) -> list[Row]:
+        """
+        Retrieves lightweight (id, listen_date, runtime) rows for every release,
+        ordered by listen date descending.
+
+        Cheap enough to run on every home page request even for large libraries,
+        since it does not touch any relationships. Used to compute day-group
+        pagination before hydrating only the current page's releases via `by_ids`.
+        """
+        try:
+            results = (
+                app_db.session.query(cls.id, cls.listen_date, cls.runtime)
+                .order_by(cls.listen_date.desc())
+                .all()
+            )
+        except Exception:
+            return []
+        return results
+
+    @classmethod
+    def by_ids(cls, ids: list[int]) -> list[Release]:
+        """
+        Retrieves full Release objects for the given IDs, with the relationships
+        needed to build a home-page entry (artist, label, main_genre, genres,
+        reviews) eagerly loaded to avoid N+1 queries.
+        """
+        if not ids:
+            return []
+        return (
+            app_db.session.query(cls)
+            .filter(cls.id.in_(ids))
+            .options(
+                joinedload(cls.artist),
+                joinedload(cls.label),
+                joinedload(cls.main_genre),
+                selectinload(cls.genres),
+                selectinload(cls.reviews),
+            )
+            .all()
+        )
 
     @classmethod
     def listens_this_year(cls) -> int:
