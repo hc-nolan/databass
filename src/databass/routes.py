@@ -97,7 +97,7 @@ def build_day_groups(rows: list) -> list[dict]:
         (e.g. "2 releases · 1h 20m"), and "ids" (release IDs in that group).
     """
     today = datetime.now().date()
-    ordered = sorted(rows, key=lambda r: r.listen_date, reverse=True)
+    ordered = sorted(rows, key=lambda r: (r.listen_date, r.id), reverse=True)
     groups = []
     for day, day_rows in groupby(ordered, key=lambda r: r.listen_date.date()):
         day_rows = list(day_rows)

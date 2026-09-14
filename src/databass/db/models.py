@@ -404,7 +404,11 @@ class Release(MusicBrainzEntity):
     def home_data_light(cls) -> list[Row]:
         """
         Retrieves lightweight (id, listen_date, runtime) rows for every release,
-        ordered by listen date descending.
+        ordered by listen date descending, then id descending.
+
+        listen_date has no time component when set from the "log a listen" form
+        (only edited manually), so most same-day rows tie on listen_date alone;
+        breaking ties by id keeps same-day entries in the order they were logged.
 
         Cheap enough to run on every home page request even for large libraries,
         since it does not touch any relationships. Used to compute day-group
@@ -413,7 +417,7 @@ class Release(MusicBrainzEntity):
         try:
             results = (
                 app_db.session.query(cls.id, cls.listen_date, cls.runtime)
-                .order_by(cls.listen_date.desc())
+                .order_by(cls.listen_date.desc(), cls.id.desc())
                 .all()
             )
         except Exception:
