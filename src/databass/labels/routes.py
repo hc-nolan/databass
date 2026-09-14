@@ -1,8 +1,8 @@
 from flask import Blueprint, render_template, request, flash, redirect
-from datetime import date
 from ..db.models import Label
 from ..db import update
 from ..api.util import Util
+from ..detail import build_label_detail
 
 label_bp = Blueprint("label_bp", __name__, template_folder="templates")
 
@@ -16,10 +16,9 @@ def label(label_id):
         error = f"No label with ID {label_id} found."
         flash(error)
         return redirect("/error", code=302)
-    no_end = date(9999, 12, 31)
-    no_start = date(1, 1, 1)
-    data = {"label": label_data, "no_end": no_end, "no_start": no_start}
-    return render_template("label.html", data=data)
+    return render_template(
+        "detail.html", active_page="browse", data=build_label_detail(label_data)
+    )
 
 
 @label_bp.route("/labels", methods=["GET"])

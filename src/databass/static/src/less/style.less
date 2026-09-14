@@ -1235,6 +1235,172 @@ select {
 }
 
 /* ==========================================================================
+   Detail page (release / artist / label)
+   ========================================================================== */
+.detail-breadcrumb {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+.detail-breadcrumb a { color: var(--muted); }
+.detail-breadcrumb a:hover { color: var(--amber); }
+.detail-breadcrumb__sep { color: var(--border-strong); }
+.detail-breadcrumb__current { color: var(--ink-2); }
+
+.detail-hero {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 26px;
+  align-items: flex-start;
+}
+.detail-hero__art {
+  width: 212px;
+  height: 212px;
+  border-radius: 8px;
+}
+.detail-hero__art .art__initials {
+  font-size: 15px;
+  letter-spacing: 0.14em;
+}
+.detail-hero__body {
+  flex: 1 1 380px;
+  min-width: 280px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.detail-hero__title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+.detail-hero__title {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.1;
+  text-wrap: pretty;
+}
+.detail-hero__links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  font-size: 14px;
+}
+.detail-hero__links a {
+  color: var(--ink-2);
+  border-bottom: 1px solid var(--link-underline);
+}
+.detail-hero__subline {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.detail-hero__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.detail-hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.detail-hero__source {
+  margin-left: 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.fact-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.fact-strip__cell {
+  flex: 1 1 128px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 13px 14px;
+  background: var(--panel);
+}
+.fact-strip__label {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.fact-strip__value {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.fact-strip__value--amber { color: var(--amber); }
+
+.detail-panel {
+  flex: 1 1 420px;
+  min-width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel);
+}
+.detail-panel--context {
+  flex: 1 1 280px;
+  min-width: 260px;
+}
+.diary-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 14px;
+  border-left: 2px solid oklch(0.36 0.03 62);
+}
+.diary-entry__date {
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+.diary-entry__text {
+  margin: 0;
+  font-style: italic;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--ink-2);
+  text-wrap: pretty;
+}
+.diary-form textarea {
+  width: 100%;
+  resize: vertical;
+}
+.context-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px 12px;
+  font-size: 12.5px;
+}
+.context-grid__label { color: var(--ink-3); }
+.context-grid__value { text-align: right; color: var(--ink); }
+
+.rail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(146px, 1fr));
+  gap: 18px 16px;
+}
+
+/* ==========================================================================
    Legacy page styles (screens not yet migrated to v0.7)
    Still reference the --white/--black/--grey aliases defined above so they
    inherit the new palette without a full rewrite.

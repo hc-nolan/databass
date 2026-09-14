@@ -1,8 +1,8 @@
-from datetime import date
 from flask import Blueprint, render_template, request, flash, redirect
 from ..db.models import Artist
 from ..api.util import Util
 from ..db import update
+from ..detail import build_artist_detail
 
 artist_bp = Blueprint("artist_bp", __name__, template_folder="templates")
 
@@ -18,10 +18,9 @@ def artist(artist_id):
         flash(error)
         return redirect("/error", code=302)
 
-    no_end = date(9999, 12, 31)
-    no_start = date(1, 1, 1)
-    data = {"artist": artist_data, "no_end": no_end, "no_start": no_start}
-    return render_template("artist.html", data=data)
+    return render_template(
+        "detail.html", active_page="browse", data=build_artist_detail(artist_data)
+    )
 
 
 @artist_bp.route("/artists", methods=["GET"])

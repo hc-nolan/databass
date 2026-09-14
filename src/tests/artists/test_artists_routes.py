@@ -1,12 +1,19 @@
 import pytest
 from databass import create_app
+from databass.db.base import app_db
+from databass.db.models import Artist
 
 
 # TODO: this fixture is a duplicate of the same fixture in test_routes.py; figure out how to generalize/reuse a single fixture instead of duplicating the code
 @pytest.fixture()
-def client():
+def app():
     app = create_app()
     app.config.update({"TESTING": True})
+    return app
+
+
+@pytest.fixture()
+def client(app):
     with app.test_client() as client:
         yield client
 
@@ -21,27 +28,24 @@ class TestArtists:
 
 class TestArtist:
     # Tests for /artist
-    def test_artist_successful_page_load(self, client, mocker):
+    def test_artist_successful_page_load(self, app, client):
         import datetime
 
-        mock_artist_data = mocker.MagicMock()
-        mock_artist_data.begin = datetime.date(1986, 10, 26)
-        mock_artist_data.country = None
-        mock_artist_data.end = datetime.date(9999, 12, 31)
-        mock_artist_data.id = 1
-        mock_artist_data.image = "./static/img/artist/1.jpg"
-        mock_artist_data.mbid = "bce6d667-cde8-485e-b078-c0a05adea36d"
-        mock_artist_data.name = "ScHoolboy Q"
-        mock_artist_data.type = "Person"
+        with app.app_context():
+            artist = Artist(
+                mbid="bce6d667-cde8-485e-b078-c0a05adea36d",
+                name="ScHoolboy Q",
+                begin=datetime.date(1986, 10, 26),
+                end=datetime.date(9999, 12, 31),
+                type="person",
+            )
+            app_db.session.add(artist)
+            app_db.session.commit()
+            artist_id = artist.id
 
-        mocker.patch("databass.db.models.Artist.releases", return_value=[])
-        mocker.patch(
-            "databass.db.models.Artist.exists_by_id", return_value=mock_artist_data
-        )
-
-        response = client.get("/artist/1")
+        response = client.get(f"/artist/{artist_id}")
         assert response.status_code == 200
-        assert b"artist_container" in response.data
+        assert b"ScHoolboy Q" in response.data
 
     def test_artist_not_found(self, client, mocker):
         mocker.patch("databass.db.models.Artist.exists_by_id", return_value=False)

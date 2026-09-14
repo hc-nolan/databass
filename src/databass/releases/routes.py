@@ -1,7 +1,9 @@
+from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, flash
 from .. import db
 from ..db import models
 from ..api import Util
+from ..detail import build_release_detail
 
 release_bp = Blueprint("release_bp", __name__, template_folder="templates")
 
@@ -14,30 +16,27 @@ def release(release_id):
         error = f"No release with id {release_id} found."
         flash(error)
         return redirect("/error", code=302)
-    artist_data = models.Artist.exists_by_id(release_data.artist_id)
-    label_data = models.Label.exists_by_id(release_data.label_id)
-    label = release_data.label
-    label_releases = []
-    if not label.name == "[NONE]":
-        for rel in label.releases:
-            if not rel.id == release_data.id:
-                label_releases.append(rel)
+    return render_template(
+        "detail.html", active_page="browse", data=build_release_detail(release_data)
+    )
 
-    artist = release_data.artist
-    artist_releases = []
-    if artist.name not in ("Various Artists", "[NONE]"):
-        for rel in artist.releases:
-            if not rel.id == release_data.id:
-                artist_releases.append(rel)
 
-    data = {
-        "release": release_data,
-        "artist": artist_data,
-        "label": label_data,
-        "label_releases": label_releases,
-        "artist_releases": artist_releases,
-    }
-    return render_template("release.html", data=data)
+@release_bp.route("/release/<string:release_id>/relisten", methods=["POST"])
+def relisten(release_id):
+    # Logs a new listen of an existing release: bumps the listen date and
+    # appends a diary entry so re-listens read as history, not an overwrite.
+    release_data = models.Release.exists_by_id(int(release_id))
+    if not release_data:
+        error = f"No release with id {release_id} found."
+        flash(error)
+        return redirect("/error", code=302)
+    release_data.listen_date = datetime.now()
+    db.update(release_data)
+    new_review = db.construct_item(
+        "review", {"release_id": int(release_id), "text": "Logged another listen."}
+    )
+    db.insert(new_review)
+    return redirect(f"/release/{release_id}", code=302)
 
 
 @release_bp.route("/release/<string:release_id>/edit", methods=["GET", "POST"])

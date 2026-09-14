@@ -1,13 +1,20 @@
 import pytest
 from databass import create_app
+from databass.db.base import app_db
+from databass.db.models import Artist, Label, Genre, Release
 import datetime
 
 
 # TODO: this fixture is a duplicate of the same fixture in other tests; figure out how to generalize/reuse a single fixture instead of duplicating the code
 @pytest.fixture()
-def client():
+def app():
     app = create_app()
     app.config.update({"TESTING": True})
+    return app
+
+
+@pytest.fixture()
+def client(app):
     with app.test_client() as client:
         yield client
 
@@ -71,16 +78,34 @@ class TestReleases:
 
 class TestRelease:
     # Tests for /release
-    def test_release_successful_page_load(
-        self, client, mock_release_data, mock_artist_data, mock_label_data, mocker
-    ):
-        mocker.patch(
-            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
-        )
-        mocker.patch("databass.db.models.Release.get_reviews", return_value=[])
-        response = client.get("/release/1")
+    def test_release_successful_page_load(self, app, client):
+        with app.app_context():
+            artist = Artist(mbid=None, name="ScHoolboy Q")
+            label = Label(mbid=None, name="Top Dawg Entertainment")
+            genre = Genre(name="hiphop")
+            app_db.session.add_all([artist, label, genre])
+            app_db.session.commit()
+
+            release = Release(
+                mbid=None,
+                artist_id=artist.id,
+                label_id=label.id,
+                name="BLUE LIPS",
+                country="[Worldwide]",
+                year=2024,
+                runtime=3361000,
+                rating=70,
+                listen_date=datetime.datetime(2024, 3, 3, 0, 0),
+                track_count=18,
+                main_genre_id=genre.id,
+            )
+            app_db.session.add(release)
+            app_db.session.commit()
+            release_id = release.id
+
+        response = client.get(f"/release/{release_id}")
         assert response.status_code == 200
-        assert b"release_container" in response.data
+        assert b"BLUE LIPS" in response.data
 
     def test_release_not_found(self, client, mocker):
         mocker.patch("databass.db.models.Release.exists_by_id", return_value=False)
