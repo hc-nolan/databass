@@ -462,8 +462,16 @@ def register_routes(app):
             abort(405)
 
         incomplete_goals = models.Goal.get_incomplete() or []
+        # An incomplete goal past its end date is missed, not active; get_past()
+        # already surfaces it there, so exclude it here to avoid double-counting
+        # it as an in-progress goal with no upper bound on its current_amount.
+        current_incomplete_goals = [
+            g for g in incomplete_goals if g.end >= datetime.now()
+        ]
         active_goal = (
-            build_active_goal_view(incomplete_goals[0]) if incomplete_goals else None
+            build_active_goal_view(current_incomplete_goals[0])
+            if current_incomplete_goals
+            else None
         )
         past_goals = [build_past_goal_view(g) for g in models.Goal.get_past()]
         current_pace = models.Release.added_per_day_this_year()

@@ -1386,12 +1386,13 @@ class Goal(Base):
     @property
     def new_releases_since_start_date(self):
         """
-        Returns the count of releases that have a listen_date greater than or equal to the start_date of the Goal instance.
-        This property is used to determine if the Goal has been met, based on the number of new releases since the Goal's start date.
+        Returns the count of releases with a listen_date within the Goal's
+        [start, end] window. This property is used to determine if the Goal
+        has been met, based on the number of new releases logged during it.
         """
         return (
             app_db.session.query(func.count(Release.id))
-            .filter(Release.listen_date >= self.start)
+            .filter(Release.listen_date >= self.start, Release.listen_date <= self.end)
             .scalar()
         )
 
@@ -1399,11 +1400,11 @@ class Goal(Base):
     def new_artists_since_start_date(self):
         """
         Returns the count of distinct artists with a release logged (listen_date
-        greater than or equal to the start_date) since the Goal instance's start date.
+        within the Goal's [start, end] window).
         """
         return (
             app_db.session.query(func.count(distinct(Release.artist_id)))
-            .filter(Release.listen_date >= self.start)
+            .filter(Release.listen_date >= self.start, Release.listen_date <= self.end)
             .scalar()
         )
 
@@ -1411,11 +1412,11 @@ class Goal(Base):
     def new_labels_since_start_date(self):
         """
         Returns the count of distinct labels with a release logged (listen_date
-        greater than or equal to the start_date) since the Goal instance's start date.
+        within the Goal's [start, end] window).
         """
         return (
             app_db.session.query(func.count(distinct(Release.label_id)))
-            .filter(Release.listen_date >= self.start)
+            .filter(Release.listen_date >= self.start, Release.listen_date <= self.end)
             .scalar()
         )
 

@@ -1450,7 +1450,7 @@ class TestGoalNewReleasesSinceStartDate:
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
         mock_query.return_value.filter.return_value.scalar.return_value = 5
 
-        goal = Goal(start=datetime.now())
+        goal = Goal(start=datetime.now(), end=datetime.now())
         result = goal.new_releases_since_start_date
         assert isinstance(result, int)
 
@@ -1459,7 +1459,7 @@ class TestGoalNewReleasesSinceStartDate:
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
         mock_query.return_value.filter.return_value.scalar.return_value = 0
 
-        goal = Goal(start=datetime.now())
+        goal = Goal(start=datetime.now(), end=datetime.now())
         goal.new_releases_since_start_date
 
         # Verify Release.id is being counted
@@ -1474,7 +1474,7 @@ class TestGoalNewReleasesSinceStartDate:
         mock_filter.return_value.scalar.return_value = 0
 
         test_date = datetime(2024, 1, 1)
-        goal = Goal(start=test_date)
+        goal = Goal(start=test_date, end=datetime(2024, 12, 31))
         goal.new_releases_since_start_date
 
         # Verify filter uses correct start date
@@ -1498,7 +1498,7 @@ class TestGoalNewReleasesSinceStartDate:
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
         mock_query.return_value.filter.return_value.scalar.return_value = count_value
 
-        goal = Goal(start=datetime.now())
+        goal = Goal(start=datetime.now(), end=datetime.now())
         result = goal.new_releases_since_start_date
         assert result == count_value
 
