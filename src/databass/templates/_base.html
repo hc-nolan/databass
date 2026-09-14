@@ -5,9 +5,10 @@
 <body>
 {% include 'includes/navbar.html' %}
 
-<div class="content">
-    {% block content %} {% endblock %}
-</div>
-    <script src="/static/dist/js/main.min.js"></script>
+{% block content %} {% endblock %}
+
+<div class="mode-pill" id="mode-pill">{% block mode_pill %}normal{% endblock %}</div>
+
+<script src="/static/dist/js/main.min.js"></script>
 </body>
 </html>

@@ -1,57 +1,50 @@
-<input type="hidden" id="current_page" value="{{ pagination.page }}">
-<table class="pure-table">
-    <thead>
-        <tr>
-            <th style="width: 13%;">
-                {% if pagination.has_prev %}
-                    <button class="pure-button pagination_button prev_page">back</button>
-                {% else %}
-                    <button disabled class="pure-button pagination_button">back</button>
-                {% endif %}
+{% import 'includes/components.html' as components %}
+<input type="hidden" id="home-page" value="{{ pagination.page }}">
+<input type="hidden" id="home-has-next" value="{{ 1 if pagination.has_next else 0 }}">
+{% for group in groups %}
+<section class="day-group">
+    <div class="day-group__head">
+        <span class="day-group__label">{{ group.label }}</span>
+        <span class="day-group__rule"></span>
+        <span class="day-group__meta">{{ group.meta }}</span>
+    </div>
 
-                {% if pagination.has_next %}
-                    <button class="pure-button pagination_button next_page">next</button>
-                {% else %}
-                    <button disabled class="pure-button pagination_button">next</button>
-                {% endif %}
-            </th>
-            <th style="width: 18%;">TITLE</th>
-            <th style="width: 18%;">ARTIST</th>
-            <th style="width: 9%;">RATING</th>
-            <th style="width: 14%;">LISTENED</th>
-            <th style="width: 14%;">GENRE</th>
-            <th style="width: 14%;">SUBGENRES</th>
-        </tr>
-    </thead>
-    <tbody>
-    {% for release in data %}
-        <tr>
-            <td>
-                <img class="pure-img" src="/img/release/{{ release.id }}" alt="album art">
-            </td>
-            <td>
-                <a href="/release/{{ release.id }}" class="link">{{ release.name }}</a>
-            </td>
-            <td>
-                <a href="/artist/{{ release.artist.id }}" class="link">{{ release.artist.name }}</a>
-            </td>
-            <td>
-                {{ release.rating }}%
-            </td>
-            <td>
-                {{ release.listen_date.date() }}
-            </td>
-            <td>
-                {{ release.main_genre.name }}
-            </td>
-            <td>
-                <p>
-                    {% for g in release.genres %}
-                        {{ g.name }}{% if not loop.last %}, {% endif %}
-                    {% endfor %}
-                </p>
-            </td>
-        </tr>
+    {% for item in group['items'] %}
+    <article class="entry-row">
+        {{ components.art(item.has_art, '/img/release/' ~ item.id, item.art_key, 'entry-row__art') }}
+
+        <div class="entry-row__body">
+            <div class="entry-row__title-line">
+                <a href="/release/{{ item.id }}" class="entry-row__title">{{ item.title }}</a>
+                <span class="entry-row__year">{{ item.year }}</span>
+            </div>
+            <div class="entry-row__credit-line">
+                <a href="/artist/{{ item.artist.id }}">{{ item.artist.name }}</a>
+                <span class="entry-row__credit-sep">/</span>
+                <a href="/label/{{ item.label.id }}">{{ item.label.name }}</a>
+            </div>
+            {% if item.main_genre or item.subgenres %}
+            <div class="entry-row__chips">
+                {% if item.main_genre %}<span class="chip chip--outline">{{ item.main_genre }}</span>{% endif %}
+                {% for sub in item.subgenres %}<span class="chip chip--plain">{{ sub }}</span>{% endfor %}
+            </div>
+            {% endif %}
+            {% if item.note %}
+            <p class="entry-row__note">{{ item.note }}</p>
+            {% endif %}
+        </div>
+
+        <div class="entry-row__score">
+            <div class="entry-row__score-value">
+                <span class="entry-row__score-num">{{ item.score }}</span>
+                <span class="entry-row__score-suffix">/10</span>
+            </div>
+            <div class="bar-track entry-row__score-track">
+                <div class="bar-fill" style="width:{{ item.rating }}%"></div>
+            </div>
+            <span class="entry-row__score-detail">{{ item.runtime }} · {{ item.track_count }} tracks</span>
+        </div>
+    </article>
     {% endfor %}
-    </tbody>
-</table>
+</section>
+{% endfor %}

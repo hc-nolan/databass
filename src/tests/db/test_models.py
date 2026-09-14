@@ -233,7 +233,7 @@ class TestMusicBrainzEntityExistsByMbid:
     def test_exists_by_mbid_returns_none_for_nonexistent_mbid(self, mocker):
         """Test that exists_by_mbid returns None when no matching MBID is found"""
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
-        mock_query.return_value.filter.return_value.one_or_none.return_value = None
+        mock_query.return_value.filter.return_value.first.return_value = None
 
         result = Release.exists_by_mbid("non-existent-mbid")
         assert result is None
@@ -243,7 +243,7 @@ class TestMusicBrainzEntityExistsByMbid:
         """Test that exists_by_mbid returns the entity when a matching MBID is found"""
         mock_entity = mocker.Mock()
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
-        mock_query.return_value.filter.return_value.one_or_none.return_value = (
+        mock_query.return_value.filter.return_value.first.return_value = (
             mock_entity
         )
 
@@ -266,7 +266,7 @@ class TestMusicBrainzEntityExistsByMbid:
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
         mock_filter = mocker.Mock()
         mock_query.return_value.filter = mock_filter
-        mock_filter.return_value.one_or_none.return_value = None
+        mock_filter.return_value.first.return_value = None
 
         Release.exists_by_mbid("test-mbid")
 
@@ -278,7 +278,7 @@ class TestMusicBrainzEntityExistsByMbid:
         """Test that exists_by_mbid handles MBIDs with whitespace correctly"""
         mock_entity = mocker.Mock()
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
-        mock_query.return_value.filter.return_value.one_or_none.return_value = (
+        mock_query.return_value.filter.return_value.first.return_value = (
             mock_entity
         )
 
@@ -658,74 +658,72 @@ class TestReleaseHomeData:
         mock_query.assert_called_once_with(Release)
         mock_order_by.assert_called_once()
 
-    def test_home_data_returns_correct_fields(self, mocker):
-        """Test that home_data returns rows with all expected fields"""
-        # Mock a database row with the expected fields
-        mock_row = mocker.Mock()
-        mock_row.artist_id = 1
-        mock_row.artist_name = "Test Artist"
-        mock_row.id = 1
-        mock_row.name = "Test Release"
-        mock_row.rating = 4.5
-        mock_row.listen_date = "2024-12-14"
-        mock_row.main_genre = "Test Genre"
-        mock_row.image = "test.jpg"
-        mock_row.genres = ["genre1", "genre2"]
 
-        # Patch the query to return a list containing the mock row
+class TestReleaseHomeDataLight:
+    """Test suite for Release.home_data_light class method"""
+
+    def test_home_data_light_returns_list(self, mocker):
+        """Test that home_data_light returns a list regardless of whether entries exist"""
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
-        mock_query.return_value.order_by.return_value.all.return_value = [mock_row]
+        mock_order_by = mock_query.return_value.order_by
+        mock_order_by.return_value.all.return_value = []
 
-        # Call the function
-        result = Release.home_data()
+        result = Release.home_data_light()
+        assert isinstance(result, list)
 
-        # Validate that one row is returned
-        assert len(result) == 1
-
-        # Validate that the row contains all expected fields
-        row = result[0]
-        expected_fields = [
-            "artist_id",
-            "artist_name",
-            "id",
-            "name",
-            "rating",
-            "listen_date",
-            "main_genre",
-            "image",
-            "genres",
-        ]
-        for field in expected_fields:
-            assert hasattr(row, field)
-
-    def test_home_data_handles_empty_genres(self, mocker):
-        """Test that home_data handles releases with no genres"""
-        # Mock a database row with genres set to None
-        mock_row = mocker.Mock()
-        mock_row.artist_id = 1
-        mock_row.artist_name = "Test Artist"
-        mock_row.id = 2
-        mock_row.name = "Another Release"
-        mock_row.rating = 3.0
-        mock_row.listen_date = "2024-12-14"
-        mock_row.main_genre = "Test Genre"
-        mock_row.image = "test2.jpg"
-        mock_row.genres = None
-
-        # Patch the query to return a list containing the mock row
+    def test_home_data_light_orders_by_listen_date_desc(self, mocker):
+        """Test that home_data_light orders results by listen date descending"""
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
-        mock_query.return_value.order_by.return_value.all.return_value = [mock_row]
+        mock_order_by = mock_query.return_value.order_by
+        mock_order_by.return_value.all.return_value = []
 
-        # Call the function
-        result = Release.home_data()
+        Release.home_data_light()
 
-        # Validate that one row is returned
-        assert len(result) == 1
+        mock_order_by.assert_called_once()
 
-        # Validate that the row has the `genres` attribute even if it's None
-        row = result[0]
-        assert hasattr(row, "genres")
-        assert row.genres is None
+    def test_home_data_light_only_queries_lightweight_columns(self, mocker):
+        """Test that home_data_light doesn't select whole Release objects"""
+        mock_query = mocker.patch("databass.db.base.app_db.session.query")
+        mock_query.return_value.order_by.return_value.all.return_value = []
+
+        Release.home_data_light()
+
+        query_args = mock_query.call_args[0]
+        assert len(query_args) == 3
+        assert all(arg is not Release for arg in query_args)
+
+    def test_home_data_light_returns_empty_on_exception(self, mocker):
+        """Test that home_data_light returns an empty list on error"""
+        mock_query = mocker.patch("databass.db.base.app_db.session.query")
+        mock_query.side_effect = Exception("Database error")
+
+        result = Release.home_data_light()
+        assert result == []
+
+
+class TestReleaseByIds:
+    """Test suite for Release.by_ids class method"""
+
+    def test_by_ids_empty_list_returns_empty(self, mocker):
+        """Test that by_ids returns an empty list without querying when given no IDs"""
+        mock_query = mocker.patch("databass.db.base.app_db.session.query")
+
+        result = Release.by_ids([])
+        assert result == []
+        mock_query.assert_not_called()
+
+    def test_by_ids_filters_by_id(self, mocker):
+        """Test that by_ids filters the query by the given IDs"""
+        mock_query = mocker.patch("databass.db.base.app_db.session.query")
+        chain = mock_query.return_value
+        chain.filter.return_value = chain
+        chain.options.return_value = chain
+        chain.all.return_value = []
+
+        Release.by_ids([1, 2, 3])
+
+        mock_query.assert_called_once_with(Release)
+        chain.filter.assert_called_once()
 
 
 class TestReleaseListensThisYear:
@@ -1452,7 +1450,7 @@ class TestGoalNewReleasesSinceStartDate:
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
         mock_query.return_value.filter.return_value.scalar.return_value = 5
 
-        goal = Goal(start=datetime.now())
+        goal = Goal(start=datetime.now(), end=datetime.now())
         result = goal.new_releases_since_start_date
         assert isinstance(result, int)
 
@@ -1461,7 +1459,7 @@ class TestGoalNewReleasesSinceStartDate:
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
         mock_query.return_value.filter.return_value.scalar.return_value = 0
 
-        goal = Goal(start=datetime.now())
+        goal = Goal(start=datetime.now(), end=datetime.now())
         goal.new_releases_since_start_date
 
         # Verify Release.id is being counted
@@ -1476,7 +1474,7 @@ class TestGoalNewReleasesSinceStartDate:
         mock_filter.return_value.scalar.return_value = 0
 
         test_date = datetime(2024, 1, 1)
-        goal = Goal(start=test_date)
+        goal = Goal(start=test_date, end=datetime(2024, 12, 31))
         goal.new_releases_since_start_date
 
         # Verify filter uses correct start date
@@ -1500,9 +1498,45 @@ class TestGoalNewReleasesSinceStartDate:
         mock_query = mocker.patch("databass.db.base.app_db.session.query")
         mock_query.return_value.filter.return_value.scalar.return_value = count_value
 
-        goal = Goal(start=datetime.now())
+        goal = Goal(start=datetime.now(), end=datetime.now())
         result = goal.new_releases_since_start_date
         assert result == count_value
+
+
+class TestGoalCurrentAmount:
+    """Test suite for Goal.current_amount property dispatch"""
+
+    @pytest.mark.parametrize(
+        "goal_type,property_name",
+        [
+            ("release", "new_releases_since_start_date"),
+            ("artist", "new_artists_since_start_date"),
+            ("label", "new_labels_since_start_date"),
+        ],
+    )
+    def test_current_amount_dispatches_by_type(
+        self, mocker, goal_type, property_name
+    ):
+        """Test that current_amount reads the property matching the goal's type"""
+        goal = Goal(start=datetime.now(), type=goal_type)
+        mocker.patch.object(
+            type(goal),
+            property_name,
+            new_callable=mocker.PropertyMock,
+            return_value=7,
+        )
+        assert goal.current_amount == 7
+
+
+class TestGoalGetPast:
+    """Test suite for Goal.get_past classmethod"""
+
+    def test_get_past_returns_empty_list_on_error(self, mocker):
+        """Test that get_past returns an empty list if the query raises"""
+        mocker.patch(
+            "databass.db.base.app_db.session.query", side_effect=Exception("boom")
+        )
+        assert Goal.get_past() == []
 
 
 class TestGenreCreateGenres:

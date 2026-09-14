@@ -1,192 +1,49 @@
 {% extends '_base.html' %}
 {% block content %}
+<div class="db-page db-page--stats" id="stats_page">
+    <main style="display:flex;flex-direction:column;gap:20px">
 
-<article id="stats">
-    <section id="stats_quick" class="pure-g">
-        <div class="pure-u-1-4 pure-u-md-1-8">
-            <p>total listens</p>
-            <p>{{ data["total_listens"] }}</p>
+        <div style="display:flex;flex-wrap:wrap;align-items:center;gap:16px">
+            <h1 class="section-head">Listening habits</h1>
+            <div class="segmented" id="stats-periods">
+                {% for p in periods %}
+                <button type="button" class="segmented__item {% if p.key == active_period %}is-active{% endif %}" data-period="{{ p.key }}">{{ p.label }}</button>
+                {% endfor %}
+            </div>
         </div>
-        <div class="pure-u-1-4 pure-u-md-1-8">
-            <p>total artists</p>
-            <p>{{ data["total_artists"] }}</p>
-        </div>
-        <div class="pure-u-1-4 pure-u-md-1-8">
-            <p>total labels</p>
-            <p>{{ data["total_labels"] }}</p>
-        </div>
-        <div class="pure-u-1-4 pure-u-md-1-8">
-            <p>average rating</p>
-            <p>{{ data["average_rating"] }}%</p>
-        </div>
-        <div class="pure-u-1-3 pure-u-md-1-8">
-            <p>total runtime</p>
-            <p>{{ data["total_runtime"] }} h</p>
-        </div>
-        <div class="pure-u-1-3 pure-u-md-1-8">
-            <p>listens this year</p>
-            <p>{{ data["releases_this_year"] }}</p>
-        </div>
-        <div class="pure-u-1-3 pure-u-md-1-8">
-            <p>listens per day</p>
-            <p>{{ data["releases_per_day"] }}</p>
-        </div>
-    </section>
-    <section id="stats_data"></section>
-</article>
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    fetch('/stats/get/artists')
-       .then(response => response.text())
-       .then(html => {
-           document.getElementById("stats_data").innerHTML = html;
-       })
-    document.addEventListener('click', function(event) {
-       if (event.target.id === "artists") {
-           fetch('/stats/get/artists')
-               .then(response => response.text())
-               .then(html => {
-                   document.getElementById("stats_data").innerHTML = html;
-               })
-       }
-       if (event.target.id === "labels") {
-           fetch('/stats/get/labels')
-               .then(response => response.text())
-               .then(html => {
-                   document.getElementById("stats_data").innerHTML = html;
-               })
-       }
-    });
-});
-</script>
+        <div id="stats-period-content">
+            {% include 'stats_period.html' %}
+        </div>
 
-{#<div id="stats">#}
-{#    <article id="stats_container">#}
+        <section class="card" style="display:flex;flex-direction:column;gap:16px">
+            <div style="display:flex;flex-wrap:wrap;align-items:center;gap:14px">
+                <span class="eyebrow--amber">LEADERBOARDS</span>
+                <div class="segmented" id="stats-scope">
+                    <button type="button" class="segmented__item is-active is-active--alt" id="artists">artists</button>
+                    <button type="button" class="segmented__item" id="labels">labels</button>
+                </div>
+            </div>
+            <div id="stats_data"></div>
+        </section>
 
-{##}
-{##}
-{#        <section id="stats_full">#}
-{##}
-{#            <div id="stats_labels" class="stats_column">#}
-{#                <h2>labels</h2>#}
-{#                <div class="stats_inner">#}
-{#                    <div class="stats_inner_column">#}
-{#                        <h3>most frequent</h3>#}
-{#                        <div class="stats_table">#}
-{#                            <div class="stats_table_head">#}
-{#                                <h4>NAME</h4>#}
-{#                                <h4 class="text_center">COUNT</h4>#}
-{#                            </div>#}
-{#                            <div class="stats_table_body">#}
-{#                                    <p>{{  label["name"] }}</p>#}
-{#                                    <p class="text_center">{{  label["count"] }}</p>#}
-{#                                {% endfor %}#}
-{#                            </div>#}
-{#                        </div>#}
-{#                    </div>#}
-{##}
-{#                    <div class="stats_inner_column">#}
-{#                        <h3>highest average</h3>#}
-{#                        <div class="stats_table">#}
-{#                            <div class="stats_table_head">#}
-{#                                <h4>NAME</h4>#}
-{#                                <h4 class="text_center">RATING</h4>#}
-{#                            </div>#}
-{#                            <div class="stats_table_body">#}
-{#                                    <p>{{ label["name"] }}</p>#}
-{#                                    <p class="text_center">{{ label["average_rating"] | int}}</p>#}
-{#                                {% endfor %}#}
-{#                            </div>#}
-{#                        </div>#}
-{#                    </div>#}
-{##}
-{#                    <div class="stats_inner_column">#}
-{#                        <div class="bayesian">#}
-{#                            <h3>favourite</h3>#}
-{#                            <p>(bayesian average)</p>#}
-{#                        </div>#}
-{#                        <div class="stats_table">#}
-{#                            <div class="stats_table_head_3">#}
-{#                                <h4>NAME</h4>#}
-{#                                <h4 class="text_center">COUNT</h4>#}
-{#                                <h4 class="text_center">RATING</h4>#}
-{#                            </div>#}
-{#                            <div class="stats_table_body_3">#}
-{#                                {% for label in data["top_rated_labels"] %}#}
-{#                                    <p>{{  label["name"] }}</p>#}
-{#                                    <p class="text_center">{{  label["count"] }}</p>#}
-{#                                    <p class="text_center">{{  label["rating"] }}</p>#}
-{#                                {% endfor %}#}
-{#                            </div>#}
-{#                        </div>#}
-{#                    </div>#}
-{##}
-{#                </div>#}
-{#            </div>#}
-{##}
-{#            <div id="stats_artists" class="stats_column">#}
-{#                <h2>artists</h2>#}
-{#                <div class="stats_inner">#}
-{##}
-{#                    <div class="stats_inner_column">#}
-{#                        <h3>most frequent</h3>#}
-{#                        <div class="stats_table">#}
-{#                            <div class="stats_table_head">#}
-{#                                <h4>NAME</h4>#}
-{#                                <h4 class="text_center">COUNT</h4>#}
-{#                            </div>#}
-{#                            <div class="stats_table_body">#}
-{#                                {% for label in data["top_frequent_artists"] %}#}
-{#                                    <p>{{  label["name"] }}</p>#}
-{#                                    <p class="text_center">{{  label["count"] }}</p>#}
-{#                                {% endfor %}#}
-{#                            </div>#}
-{#                        </div>#}
-{#                    </div>#}
-{##}
-{#                    <div class="stats_inner_column">#}
-{#                        <h3>highest average</h3>#}
-{#                        <div class="stats_table">#}
-{#                            <div class="stats_table_head">#}
-{#                                <h4>NAME</h4>#}
-{#                                <h4 class="text_center">RATING</h4>#}
-{#                            </div>#}
-{#                            <div class="stats_table_body">#}
-{#                                {% for artist in data["top_average_artists"] %}#}
-{#                                    <p>{{ artist["name"] }}</p>#}
-{#                                    <p class="text_center">{{ artist["average_rating"] | int}}</p>#}
-{#                                {% endfor %}#}
-{#                            </div>#}
-{#                        </div>#}
-{#                    </div>#}
-{##}
-{#                    <div class="stats_inner_column">#}
-{#                        <div class="bayesian">#}
-{#                            <h3>favourite</h3>#}
-{#                            <p>(bayesian average)</p>#}
-{#                        </div>#}
-{#                        <div class="stats_table">#}
-{#                            <div class="stats_table_head_3">#}
-{#                                <h4>NAME</h4>#}
-{#                                <h4 class="text_center">COUNT</h4>#}
-{#                                <h4 class="text_center">RATING</h4>#}
-{#                            </div>#}
-{#                            <div class="stats_table_body_3">#}
-{#                                {% for artist in data["top_rated_artists"] %}#}
-{#                                    <p>{{  artist["name"] }}</p>#}
-{#                                    <p class="text_center">{{  artist["count"] }}</p>#}
-{#                                    <p class="text_center">{{  artist["rating"] }}</p>#}
-{#                                {% endfor %}#}
-{#                            </div>#}
-{#                        </div>#}
-{#                    </div>#}
-{##}
-{#                </div>#}
-{##}
-{#            </div>#}
-{#        </section>#}
-{#    </article>#}
-{#</div>#}
+        <section class="card" style="display:flex;flex-direction:column;gap:14px">
+            <span class="eyebrow--amber">WHAT YOU LISTEN TO</span>
+            <div style="display:flex;flex-direction:column;gap:11px">
+                {% for g in genres %}
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px">
+                    <div style="display:flex;flex-direction:column;gap:5px;min-width:0">
+                        <span style="font-size:12.5px">{{ g.name }}</span>
+                        <div class="bar-track" style="height:4px">
+                            <div class="bar-fill" style="width:{{ g.w }}%"></div>
+                        </div>
+                    </div>
+                    <span style="font-size:12px;color:var(--ink-3);min-width:76px;text-align:right">{{ g.value }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
 
+    </main>
+</div>
 {% endblock %}

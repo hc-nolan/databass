@@ -45,277 +45,476 @@ function handleEditButton(editButton) {
         })
 }
 
-function formatDataString(data) {
-    // Escape parts of response data that cause JSON.parse to error
-    // Some of these are extremely case specific; ideally should be more generalized
-    // i.e
-    // .replace(/ "n/g, " 'n") = Drum "n' Bass -> Drum 'n' Bass
-    // .replace(/ "n' /g, " 'n' ") = Neu! "75 -> Neu! '75
-    // Both of the above cases are caused by the other more generic replacements
-    // Way to avoid most of this altogether would be to just URLencode key/value pairs
-    return data
-        .replace(/None/g, 'null')
-        .replace(/{'/g, '{"')
-        .replace(/'}/g, '"}')
-        .replace(/':/g, '":')
-        .replace(/ '/g, ' "')
-        .replace(/',/g, '",')
-        .replace(/ "n' /g, " 'n' ")
-        .replace(/\['/g, '\["')
-        .replace(/'\]/g, '"\]')
-        .replace(/! "75/g, "! '75'")
-        .replace(/(12|10|7)" Vinyl/g, '$1\\" Vinyl');
-}
-
-function addPopupListeners(html) {
-    document.getElementById("search_results").innerHTML = html;
-    let tableRows = document.querySelectorAll(".row");
-    tableRows.forEach((tableRow) => {
-        tableRow.addEventListener("click", function() {
-            let data = formatDataString(tableRow.dataset.item);
-            let parsed_data = JSON.parse(data)
-            fetch("/new_release", {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(parsed_data)
-            })
-                .then(response => response.text())
-                .then(html => {
-                    let popup = document.createElement('div')
-                    popup.className = 'popup';
-                    popup.innerHTML = html;
-                    document.body.appendChild(popup);
-                    popup.querySelector('.close-btn').addEventListener('click', function() {
-                        document.body.removeChild(popup);
-                    });
-                })
-                .catch(err => { console.log(err) })
-        });
-    });
-}
-
-function handleSearchButton() {
-    let page;
-    try {
-        page = document.querySelector('#current_page').value;
-    } catch(e) {
-        page = "1";
-    }
-    let referrer;
-    try {
-        referrer = document.querySelector("#referrer").value;
-    } catch(e) {
-        referrer = "search"
-    }
-    const data = {
-        release: document.querySelector("#release").value,
-        artist: document.querySelector("#artist").value,
-        label: document.querySelector("#label").value,
-        "referrer": referrer,
-        "page": page
-    };
-    fetch('/search', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(data)
-    })
-    .then(response => response.text())
-    .then(html => {
-        // add event listener to each table row
-        addPopupListeners(html);
-    })
-    .catch(error => {
-        console.error('Fetch error:', error);
-    });
-}
-
-function loadSearchResults(direction) {
-    let targetPage = getTargetPage(direction);
-    let data = document.getElementById("data_full").innerHTML;
-    let formattedData = formatDataString(data);
-    let parsedData = JSON.parse(formattedData);
-    fetch('/search_results?page=' + targetPage, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(parsedData)
-    })
+function loadHomeTable(page, append) {
+    fetch('/home_release_table?page=' + page)
         .then(response => response.text())
         .then(html => {
-            addPopupListeners(html);
-            // document.getElementById('search_results').innerHTML = html;
+            const container = document.getElementById('home_release_table');
+            if (append) {
+                container.insertAdjacentHTML('beforeend', html);
+            } else {
+                container.innerHTML = html;
+            }
+            const hasNext = document.getElementById('home-has-next');
+            const loadMoreBtn = document.getElementById('load-earlier');
+            if (loadMoreBtn) {
+                loadMoreBtn.style.display = (hasNext && hasNext.value === '1') ? '' : 'none';
+            }
         });
 }
 
-function getTargetPage(direction) {
-    let currentPage;
-    try {
-        currentPage = document.getElementById('current_page').value;
-    } catch (e) {
-        currentPage = "1";
-    }
-    let targetPage = currentPage;
-    if (direction === 'prev') targetPage = parseInt(currentPage) - 1;
-    if (direction === 'next') targetPage = parseInt(currentPage) + 1;
-    return targetPage
-}
+function initNewListenPage() {
+    const releaseInput = document.querySelector('#release');
+    const artistInput = document.querySelector('#artist');
+    const labelInput = document.querySelector('#label');
+    const searchBtn = document.querySelector('#search-btn');
+    const manualToggle = document.querySelector('#manual-entry-toggle');
+    const resultsContainer = document.querySelector('#search_results');
+    const logForm = document.querySelector('#log-form');
+    const logEmpty = document.querySelector('#log-panel-empty');
+    const listenDateInput = document.querySelector('#lf-listen-date');
+    const defaultListenDate = listenDateInput.value;
+    const ratingWords = ["", "actively bad", "didn't work", "flat", "thin", "fine", "solid", "really good", "excellent", "near-perfect", "all-timer"];
+    let subgenres = [];
 
-function loadHomeTable(direction) {
-    let targetPage = getTargetPage(direction);
-    fetch('/home_release_table?page=' + targetPage)
-        .then(response => response.text())
-        .then(html => {
-            document.getElementById('home_release_table').innerHTML = html;
-        });
-}
-
-function loadSearchTable(type, direction) {
-    let formData;
-    if (type === 'release') {
-        formData = {
-            name: document.querySelector("#name").value,
-            artist: document.querySelector("#artist").value,
-            label: document.querySelector("#label").value,
-            country: document.querySelector("#country").value,
-            rating_comparison: document.querySelector("#rating-filter").value,
-            rating: document.querySelector("#rating").value,
-            year_comparison: document.querySelector("#year-filter").value,
-            year: document.querySelector("#year").value,
-            main_genre: document.querySelector("#main_genre").value,
-            // genres: [document.querySelector("#genres").value]
-        };
-        console.log(formData);
-    }
-    if (type === 'artist') {
-        formData = {
-            name: document.querySelector("#artist").value,
-            country: document.querySelector("#country").value,
-            begin_comparison: document.querySelector("#begin_filter").value,
-            begin_date: document.querySelector("#begin").value,
-            end_comparison: document.querySelector("#end_filter").value,
-            end_date: document.querySelector("#end").value,
-            type: document.querySelector("#type").value
-        };
-    }
-    if (type === 'label') {
-        formData = {
-            name: document.querySelector("#label").value,
-            country: document.querySelector("#country").value,
-            begin_comparison: document.querySelector("#begin_filter").value,
-            begin_date: document.querySelector("#begin").value,
-            end_comparison: document.querySelector("#end_filter").value,
-            end_date: document.querySelector("#end").value,
-            type: document.querySelector("#type").value,
-        }
-    }
-    let targetPage = getTargetPage(direction);
-    fetch('/' + type + '_search?page=' + targetPage, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(formData)
-    })
-        .then(response => response.text())
-        .then(html => {
-            document.getElementById('search-results').innerHTML = html;
+    function runSearch() {
+        const release = releaseInput.value.trim();
+        const artist = artistInput.value.trim();
+        const label = labelInput.value.trim();
+        if (!release && !artist && !label) return;
+        searchBtn.disabled = true;
+        searchBtn.textContent = 'SEARCHING…';
+        resultsContainer.innerHTML = '<div class="new-search__loading"><span class="spinner"></span>searching MusicBrainz…</div>';
+        fetch('/search', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                release: release || null,
+                artist: artist || null,
+                label: label || null,
+            }),
         })
+            .then(response => response.text())
+            .then(html => { resultsContainer.innerHTML = html; wireResultFilters(); })
+            .catch(err => {
+                console.error('Search failed:', err);
+                resultsContainer.innerHTML = '<div class="new-search__loading">search failed, try again</div>';
+            })
+            .finally(() => {
+                searchBtn.disabled = false;
+                searchBtn.textContent = 'SEARCH';
+            });
+    }
+
+    function loadManualEntry() {
+        fetch('/search', { method: 'GET' })
+            .then(response => response.text())
+            .then(html => { resultsContainer.innerHTML = html; })
+            .catch(err => console.error('Manual entry load failed:', err));
+    }
+
+    function wireResultFilters() {
+        const titleInput = document.querySelector('#rf-title');
+        const artistSelect = document.querySelector('#rf-artist');
+        const yearSelect = document.querySelector('#rf-year');
+        const formatSelect = document.querySelector('#rf-format');
+        const countrySelect = document.querySelector('#rf-country');
+        if (!titleInput) return;
+
+        const rows = Array.from(document.querySelectorAll('#new-results-items .result-row'));
+        const countLabel = document.querySelector('#new-results-count');
+        const emptyMsg = document.querySelector('#new-results-empty');
+
+        function applyFilters() {
+            const title = titleInput.value.trim().toLowerCase();
+            const artist = artistSelect.value;
+            const year = yearSelect.value;
+            const format = formatSelect.value;
+            const country = countrySelect.value;
+
+            let visibleCount = 0;
+            rows.forEach(row => {
+                let item;
+                try {
+                    item = JSON.parse(row.dataset.item);
+                } catch (e) {
+                    return;
+                }
+                const matches =
+                    (!title || (item.release.name || '').toLowerCase().includes(title)) &&
+                    (!artist || item.artist.name === artist) &&
+                    (!year || String(item.date) === year) &&
+                    (!format || item.format === format) &&
+                    (!country || item.country === country);
+                row.hidden = !matches;
+                if (matches) visibleCount++;
+            });
+
+            if (countLabel) countLabel.textContent = visibleCount + ' result' + (visibleCount !== 1 ? 's' : '');
+            if (emptyMsg) emptyMsg.hidden = visibleCount !== 0;
+        }
+
+        titleInput.addEventListener('input', applyFilters);
+        [artistSelect, yearSelect, formatSelect, countrySelect].forEach(select => {
+            select.addEventListener('change', applyFilters);
+        });
+    }
+
+    function updateRatingUI(rating) {
+        document.querySelectorAll('#lf-rating-segmented .segmented__item').forEach(btn => {
+            btn.classList.toggle('is-active', parseInt(btn.dataset.rating, 10) <= rating);
+        });
+        document.querySelector('#lf-rating').value = rating * 10;
+        document.querySelector('#lf-rating-label').textContent = rating.toFixed(1) + ' / 10';
+        document.querySelector('#lf-rating-hint').textContent =
+            ratingWords[rating] + ' · stored as ' + (rating * 10) + '%';
+    }
+
+    function syncGenreSuggestions() {
+        document.querySelectorAll('#lf-genre-suggestions [data-genre-suggestion]').forEach(chip => {
+            chip.classList.toggle('is-selected', subgenres.includes(chip.dataset.genreSuggestion));
+        });
+    }
+
+    function renderSubgenreChips() {
+        const container = document.querySelector('#lf-subgenre-chips');
+        container.innerHTML = '';
+        subgenres.forEach(name => {
+            const chip = document.createElement('button');
+            chip.type = 'button';
+            chip.className = 'chip is-selected';
+            chip.textContent = name + ' ×';
+            chip.addEventListener('click', () => {
+                subgenres = subgenres.filter(g => g !== name);
+                syncGenreSuggestions();
+                renderSubgenreChips();
+            });
+            container.appendChild(chip);
+        });
+        document.querySelector('#lf-genres').value = subgenres.join(',');
+    }
+
+    function addSubgenre(name) {
+        name = name.trim();
+        if (!name || subgenres.includes(name)) return;
+        subgenres.push(name);
+        syncGenreSuggestions();
+        renderSubgenreChips();
+    }
+
+    function selectResult(row) {
+        let item;
+        try {
+            item = JSON.parse(row.dataset.item);
+        } catch (e) {
+            console.error('Failed to parse result data', e);
+            return;
+        }
+        document.querySelectorAll('.result-row').forEach(r => r.classList.remove('is-selected'));
+        row.classList.add('is-selected');
+
+        document.querySelector('#lf-release_group_id').value = item.release_group_id || '';
+        document.querySelector('#lf-release_name').value = item.release.name || '';
+        document.querySelector('#lf-artist').value = item.artist.name || '';
+        document.querySelector('#lf-label').value = item.label.name || '';
+        document.querySelector('#lf-release_mbid').value = item.release.mbid || '';
+        document.querySelector('#lf-artist_mbid').value = item.artist.mbid || '';
+        document.querySelector('#lf-label_mbid').value = item.label.mbid || '';
+        document.querySelector('#lf-track_count').value = item.track_count || 0;
+        document.querySelector('#lf-country').value = item.country || '';
+        document.querySelector('#lf-year').value = item.date || 0;
+
+        document.querySelector('#lf-title-display').textContent = item.release.name || '';
+        document.querySelector('#lf-artist-display').textContent = item.artist.name || '';
+        document.querySelector('#lf-subline-display').textContent =
+            [item.label.name, item.date, item.format, item.country].filter(Boolean).join(' · ');
+        document.querySelector('#lf-tracks-display').value = item.track_count || '';
+
+        logEmpty.hidden = true;
+        logForm.hidden = false;
+        document.querySelector('#lf-main-genre').focus();
+    }
+
+    searchBtn.addEventListener('click', runSearch);
+    [releaseInput, artistInput, labelInput].forEach(input => {
+        input.addEventListener('keydown', e => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                runSearch();
+            }
+        });
+    });
+    manualToggle.addEventListener('click', loadManualEntry);
+
+    resultsContainer.addEventListener('click', e => {
+        const row = e.target.closest('.result-row');
+        if (row) selectResult(row);
+    });
+    resultsContainer.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        const row = e.target.closest('.result-row');
+        if (row) selectResult(row);
+    });
+
+    document.querySelector('#lf-rating-segmented').addEventListener('click', e => {
+        const btn = e.target.closest('[data-rating]');
+        if (btn) updateRatingUI(parseInt(btn.dataset.rating, 10));
+    });
+
+    document.querySelector('#lf-genre-suggestions').addEventListener('click', e => {
+        const chip = e.target.closest('[data-genre-suggestion]');
+        if (!chip) return;
+        const name = chip.dataset.genreSuggestion;
+        if (subgenres.includes(name)) {
+            subgenres = subgenres.filter(g => g !== name);
+        } else {
+            subgenres.push(name);
+        }
+        syncGenreSuggestions();
+        renderSubgenreChips();
+    });
+
+    document.querySelector('#lf-subgenre-input').addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addSubgenre(e.target.value);
+            e.target.value = '';
+        }
+    });
+
+    document.querySelector('#lf-clear').addEventListener('click', () => {
+        updateRatingUI(7);
+        subgenres = [];
+        syncGenreSuggestions();
+        renderSubgenreChips();
+        document.querySelector('#lf-note').value = '';
+        listenDateInput.value = defaultListenDate;
+    });
+
+    updateRatingUI(7);
+
+    const initialQuery = document.querySelector('#new-q');
+    if (initialQuery && initialQuery.value) {
+        releaseInput.value = initialQuery.value;
+        runSearch();
+    }
+}
+
+function initBrowsePage() {
+    const page = document.querySelector('#browse_page');
+    const tab = page.dataset.tab;
+    const resultsContainer = document.querySelector('#browse-results');
+    const qInput = document.querySelector('#browse-q');
+    const countryFacet = document.querySelector('#browse-country');
+    const genreFacet = document.querySelector('#browse-genre');
+    const yearFacet = document.querySelector('#browse-year-min');
+    const typeFacet = document.querySelector('#browse-type');
+    const releasesFacet = document.querySelector('#browse-releases-min');
+    const ratingFacet = document.querySelector('#browse-rating-min');
+    const sortBtns = Array.from(document.querySelectorAll('.browse-sort'));
+    const viewBtns = Array.from(document.querySelectorAll('.browse-view-btn'));
+
+    let sort = sortBtns.length ? sortBtns[0].dataset.sort : 'listened';
+    let debounceTimer;
+
+    function currentParams(page) {
+        const params = new URLSearchParams();
+        if (qInput.value.trim()) params.set('q', qInput.value.trim());
+        if (countryFacet && countryFacet.value) params.set('country', countryFacet.value);
+        if (genreFacet && genreFacet.value) params.set('genre', genreFacet.value);
+        if (yearFacet && yearFacet.value) params.set('year_min', yearFacet.value);
+        if (typeFacet && typeFacet.value) params.set('type', typeFacet.value);
+        if (releasesFacet && releasesFacet.value) params.set('releases_min', releasesFacet.value);
+        if (ratingFacet && ratingFacet.value) params.set('rating_min', ratingFacet.value);
+        params.set('sort', sort);
+        params.set('page', page);
+        return params;
+    }
+
+    function loadResults(page) {
+        const params = currentParams(page);
+        fetch('/browse/' + tab + '/results?' + params.toString())
+            .then(response => response.text())
+            .then(html => { resultsContainer.innerHTML = html; })
+            .catch(err => console.error('Browse results failed:', err));
+    }
+
+    qInput.addEventListener('input', () => {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => loadResults(1), 300);
+    });
+
+    [countryFacet, genreFacet, yearFacet, typeFacet, releasesFacet, ratingFacet].forEach(el => {
+        if (el) el.addEventListener('change', () => loadResults(1));
+    });
+
+    sortBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            sortBtns.forEach(b => b.classList.remove('is-active'));
+            btn.classList.add('is-active');
+            sort = btn.dataset.sort;
+            loadResults(1);
+        });
+    });
+
+    viewBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            viewBtns.forEach(b => b.classList.remove('is-active'));
+            btn.classList.add('is-active');
+            resultsContainer.classList.toggle('is-list', btn.dataset.view === 'list');
+        });
+    });
+
+    resultsContainer.addEventListener('click', e => {
+        const btn = e.target.closest('.browse-page-btn');
+        if (!btn || btn.disabled) return;
+        e.preventDefault();
+        loadResults(parseInt(btn.dataset.page, 10));
+    });
+
+    loadResults(1);
+}
+
+function initStatsPage() {
+    const periodBtns = Array.from(document.querySelectorAll('#stats-periods .segmented__item'));
+    const periodContent = document.querySelector('#stats-period-content');
+    const scopeBtns = Array.from(document.querySelectorAll('#stats-scope .segmented__item'));
+    const leaderboards = document.querySelector('#stats_data');
+
+    periodBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            periodBtns.forEach(b => b.classList.remove('is-active'));
+            btn.classList.add('is-active');
+            fetch('/stats/period/' + btn.dataset.period)
+                .then(response => response.text())
+                .then(html => { periodContent.innerHTML = html; })
+                .catch(err => console.error('Stats period failed:', err));
+        });
+    });
+
+    function loadLeaderboards(scope) {
+        fetch('/stats/get/' + scope)
+            .then(response => response.text())
+            .then(html => { leaderboards.innerHTML = html; })
+            .catch(err => console.error('Stats leaderboards failed:', err));
+    }
+
+    scopeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            scopeBtns.forEach(b => b.classList.remove('is-active', 'is-active--alt'));
+            btn.classList.add('is-active', 'is-active--alt');
+            loadLeaderboards(btn.id);
+        });
+    });
+
+    loadLeaderboards('artists');
+}
+
+function initGoalsPage() {
+    const section = document.querySelector('#goal-form-section');
+    if (!section) return;
+
+    const currentPace = parseFloat(section.dataset.currentPace) || 0;
+    const today = section.dataset.today;
+    const amountInput = document.querySelector('#goal-amount');
+    const endInput = document.querySelector('#goal-end');
+    const typeInput = document.querySelector('#goal-type');
+    const typeBtns = Array.from(document.querySelectorAll('#goal-type-segmented .segmented__item'));
+    const feasRate = document.querySelector('#goal-feas-rate');
+    const feasText = document.querySelector('#goal-feas-text');
+    const feasBox = document.querySelector('#goal-feasibility');
+
+    const MSPERDAY = 86400000;
+
+    function recompute() {
+        const amount = parseInt(amountInput.value, 10) || 0;
+        const endMs = Date.parse(endInput.value);
+        const todayMs = Date.parse(today);
+        if (Number.isNaN(endMs)) return;
+
+        const formDays = Math.max(1, Math.round((endMs - todayMs) / MSPERDAY));
+        const rate = amount / formDays;
+        feasRate.textContent = rate.toFixed(2) + ' / day';
+
+        if (currentPace <= 0) {
+            feasBox.style.borderColor = 'var(--border)';
+            feasRate.style.color = 'var(--ink)';
+            feasText.textContent = 'Log a few releases to get a feasibility estimate based on your pace.';
+            return;
+        }
+
+        const ratio = rate / currentPace;
+        let color, borderColor, text;
+        if (ratio <= 0.85) {
+            color = 'var(--cyan)';
+            borderColor = 'var(--cyan)';
+            const hitDate = new Date(todayMs + (amount / currentPace) * MSPERDAY);
+            text = 'Comfortable. That\'s below your ' + currentPace.toFixed(2) + ' / day average — you\'d hit it around ' +
+                hitDate.toISOString().slice(0, 10) + ' at your current pace.';
+        } else if (ratio <= 1.25) {
+            color = 'var(--amber)';
+            borderColor = 'var(--amber)';
+            text = 'Realistic. Roughly your current pace of ' + currentPace.toFixed(2) + ' / day, sustained for ' + formDays + ' days.';
+        } else {
+            color = 'var(--red)';
+            borderColor = 'var(--red)';
+            text = 'Ambitious. That\'s ' + ratio.toFixed(1) + '× your current pace — you\'d need to log ' +
+                Math.ceil(rate - currentPace) + ' more per day than you do now.';
+        }
+        feasBox.style.borderColor = borderColor;
+        feasRate.style.color = color;
+        feasText.textContent = text;
+    }
+
+    amountInput.addEventListener('input', recompute);
+    endInput.addEventListener('change', recompute);
+
+    typeBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            typeBtns.forEach(b => b.classList.remove('is-active'));
+            btn.classList.add('is-active');
+            typeInput.value = btn.dataset.value;
+        });
+    });
+
+    document.querySelectorAll('.goal-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            amountInput.value = btn.dataset.amount;
+            endInput.value = btn.dataset.end;
+            recompute();
+        });
+    });
+
+    recompute();
 }
 
 document.addEventListener('DOMContentLoaded', () => {
     if (window.location.pathname === "/" || window.location.pathname === "/home") {
-        loadHomeTable();
-        document.addEventListener('click', function(event) {
-            if (event.target.classList.contains('prev_page')) {
-                loadHomeTable('prev')
-            }
-            if (event.target.classList.contains('next_page')) {
-                loadHomeTable('next')
-            }
-        });
+        loadHomeTable(1, false);
+        const loadMoreBtn = document.getElementById('load-earlier');
+        if (loadMoreBtn) {
+            loadMoreBtn.addEventListener('click', function() {
+                const pageField = document.getElementById('home-page');
+                const currentPage = pageField ? parseInt(pageField.value, 10) || 1 : 1;
+                loadHomeTable(currentPage + 1, true);
+            });
+        }
     }
 
     if (window.location.pathname === "/new") {
-        document.addEventListener('click', function(event) {
-            if (event.target && event.target.classList.contains('manual_entry')) {
-                event.preventDefault();
-                fetch('/search', {
-                    method: 'GET'
-                })
-                    .then(response => response.text())
-                    .then(html => {
-            document.getElementById('search_results').innerHTML = html;
-                    })
-                    .catch(error => {
-                        console.error('Fetch error:', error);
-                    });
-            }
-            if (event.target && event.target.classList.contains('new_search')) {
-                handleSearchButton();
-                document.addEventListener('click', function(event) {
-                    if (event.target.classList.contains('prev_page')) {
-                        loadSearchResults('prev')
-                    }
-                    if (event.target.classList.contains('next_page')) {
-                        loadSearchResults('next')
-                    }
-                });
-            }
-        });
-        document.addEventListener('keydown', function (event) {
-            if (event.key === 'Enter') {
-                handleSearchButton();
-            }
-        });
+        initNewListenPage();
     }
 
-    if (window.location.pathname === "/releases") {
-        document.addEventListener('click', function (event) {
-            if (event.target && event.target.id === 'release-search') {
-                loadSearchTable('release');
-            }
-            if (event.target && event.target.classList.contains('pagination_button')) {
-                if (event.target.classList.contains('prev_page')) {
-                    loadSearchTable('release', 'prev')
-                }
-                if (event.target.classList.contains('next_page')) {
-                    loadSearchTable('release', 'next')
-                }
-            }
-        })
+    if (window.location.pathname.startsWith("/browse")) {
+        initBrowsePage();
     }
 
-    if (window.location.pathname === "/artists") {
-        document.addEventListener('click', function (event) {
-            if (event.target && event.target.id === 'artist-search') {
-                loadSearchTable('artist');
-            }
-            if (event.target && event.target.classList.contains('pagination_button')) {
-                if (event.target.classList.contains('prev_page')) {
-                    loadSearchTable('artist', 'prev')
-                }
-                if (event.target.classList.contains('next_page')) {
-                    loadSearchTable('artist', 'next')
-                }
-            }
-        })
+    if (window.location.pathname === "/stats") {
+        initStatsPage();
     }
 
-    if (window.location.pathname === "/labels") {
-        document.addEventListener('click', function (event) {
-            if (event.target && event.target.id === 'label-search') {
-                loadSearchTable('label');
-            }
-            if (event.target && event.target.classList.contains('pagination_button')) {
-                if (event.target.classList.contains('prev_page')) {
-                    loadSearchTable('label', 'prev')
-                }
-                if (event.target.classList.contains('next_page')) {
-                    loadSearchTable('label', 'next')
-                }
-            }
-        })
+    if (window.location.pathname === "/goals") {
+        initGoalsPage();
     }
 
     document.addEventListener('click', function(event) {

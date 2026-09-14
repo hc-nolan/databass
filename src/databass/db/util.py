@@ -1,13 +1,13 @@
 from typing import Type
 from sqlalchemy.orm import query as sql_query
-from .operations import insert
+from .operations import insert, construct_item
 
 # from .models import *
 # above imports all of the below
 from sqlalchemy import extract, Integer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine.row import Row
-from .models import Artist, Release, Label, MusicBrainzEntity, Base, Goal, Genre
+from .models import Artist, Release, Label, MusicBrainzEntity, Base, Goal, Genre, Review
 
 
 def get_valid_models():
@@ -184,5 +184,13 @@ def handle_submit_data(submit_data: dict) -> None:
         for g in submit_data["genres"].split(","):
             genres.append(Genre.create_if_not_exists(g))
     submit_data["genres"] = genres
-    Release.create_new(submit_data)
+    note = submit_data.pop("note", None)
+    release_id = Release.create_new(submit_data)
+
+    if note:
+        review = construct_item(
+            "review", {"text": note, "release_id": release_id}
+        )
+        insert(review)
+
     Goal.check_goals()

@@ -1,18 +1,18 @@
-<div id="navbar" class="pure-menu pure-menu-horizontal">
-    <h1>databass v{{ g.app_version }}</h1>
-    <ul class="pure-menu-list">
-        <li class="pure-menu-item"><a href="/" class="{% if active_page == 'home' %}active{% endif %} pure-menu-link">home</a></li>
-        &nbsp / &nbsp
-        <li class="pure-menu-item"><a href="/new" id="new-release-link" class="{% if active_page == 'new' %}active{% endif %} pure-menu-link">new</a></li>
-        &nbsp / &nbsp
-        <li class="pure-menu-item"><a href="/releases" id="releases-link" class="{% if active_page == 'releases' %}active{% endif %} pure-menu-link">releases</a></li>
-        &nbsp / &nbsp
-        <li class="pure-menu-item"><a href="/artists" id="artists-link" class="{% if active_page == 'artists' %}active{% endif %} pure-menu-link">artists</a></li>
-        &nbsp / &nbsp
-        <li class="pure-menu-item"><a href="/labels" id="labels-link" class="{% if active_page == 'labels' %}active{% endif %} pure-menu-link">labels</a></li>
-        &nbsp / &nbsp
-        <li class="pure-menu-item"><a href="/stats" id="stats-link" class="{% if active_page == 'stats' %}active{% endif %} pure-menu-link">stats</a></li>
-        &nbsp / &nbsp
-        <li class="pure-menu-item"><a href="/goals" id="goals-link" class="{% if active_page == 'goals' %}active{% endif %} pure-menu-link">goals</a></li>
-    </ul>
-</div>
+<header class="db-header">
+    <div class="db-wordmark-group">
+        <span class="db-wordmark">databass</span>
+        <span class="db-version">v{{ g.app_version }}</span>
+    </div>
+    <nav class="db-nav">
+        <a href="/" class="{% if active_page == 'home' %}active{% endif %}">home</a>
+        <a href="/new" class="{% if active_page == 'new' %}active{% endif %}">new</a>
+        <a href="/browse" class="{% if active_page == 'browse' %}active{% endif %}">browse</a>
+        <a href="/stats" class="{% if active_page == 'stats' %}active{% endif %}">stats</a>
+        <a href="/goals" class="{% if active_page == 'goals' %}active{% endif %}">goals</a>
+    </nav>
+    <div class="db-header-meta">
+        <span>{{ '{:,}'.format(g.total_logged) }} logged</span>
+        <span class="sep"></span>
+        <span>day {{ g.day_of_year }} / {{ g.current_year }}</span>
+    </div>
+</header>

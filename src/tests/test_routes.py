@@ -1,5 +1,6 @@
 import pytest
 from databass import create_app
+from databass.db.models import Goal
 from datetime import datetime
 
 
@@ -24,7 +25,7 @@ class TestNew:
     def test_new_page_load_success(self, client):
         response = client.get("/new")
         assert response.status_code == 200
-        assert b"new-release" in response.data
+        assert b"new_release" in response.data
 
 
 class TestSearch:
@@ -153,61 +154,86 @@ class TestSubmit:
 
 class TestStats:
     # Tests for /stats
-    def test_home_page_load_success(self, client, mocker):
-        mock_get_stats = mocker.patch("databass.routes.get_all_stats", return_value={})
+    def test_stats_page_load_success(self, client):
         response = client.get("/stats")
         assert response.status_code == 200
-        assert b"stats" in response.data
-        mock_get_stats.assert_called_once()
+        assert b"Listening habits" in response.data
+
+    def test_stats_period_ajax(self, client):
+        response = client.get("/stats/period/all")
+        assert response.status_code == 200
+        assert b"WHEN YOU LISTEN" in response.data
+
+    def test_stats_get_artists(self, client):
+        response = client.get("/stats/get/artists")
+        assert response.status_code == 200
+
+    def test_stats_get_labels(self, client):
+        response = client.get("/stats/get/labels")
+        assert response.status_code == 200
 
 
 class TestGoals:
     # Tests for /goals route
-    def test_goals_no_goals_found(self, client, mocker):
+    def test_goals_no_active_goal(self, client, mocker):
         """
-        Test for correct handling when no goals are found in database
+        Test for correct handling when there is no active (incomplete) goal
         """
         mocker.patch("databass.db.models.Goal.get_incomplete", return_value=[])
+        mocker.patch("databass.db.models.Goal.get_past", return_value=[])
         response = client.get("/goals")
         assert response.status_code == 200
         assert b"No existing goals" in response.data
 
-    def test_goals_all_goals_displayed(self, client, mocker):
+    def test_goals_active_goal_displayed(self, client, mocker):
         """
-        Test that all goals available in database are displayed
+        Test that the most recent incomplete goal is rendered as the active goal
         """
-        mock_goals = [
-            {
-                "id": 1,
-                "start": datetime(2024, 1, 1),
-                "end": datetime(2025, 1, 1),
-                "completed": None,
-                "type": "release",
-                "amount": 50,
-            },
-            {
-                "id": 2,
-                "start": datetime(2024, 1, 1),
-                "end": datetime(2026, 1, 1),
-                "completed": None,
-                "type": "album",
-                "amount": 10,
-            },
-            {
-                "id": 3,
-                "start": datetime(2024, 1, 1),
-                "end": datetime(2027, 1, 1),
-                "completed": None,
-                "type": "label",
-                "amount": 250,
-            },
-        ]
-        mocker.patch("databass.db.models.Goal.get_incomplete", return_value=mock_goals)
+        active = Goal(
+            id=1,
+            start=datetime(2024, 1, 1),
+            end=datetime(2027, 1, 1),
+            completed=None,
+            type="release",
+            amount=250,
+        )
+        mocker.patch("databass.db.models.Goal.get_incomplete", return_value=[active])
+        mocker.patch("databass.db.models.Goal.get_past", return_value=[])
         response = client.get("/goals")
         assert response.status_code == 200
-        assert b"2027-01-01" in response.data
-        assert b"10" in response.data
-        assert b"release" in response.data
+        assert b"ACTIVE GOAL" in response.data
+        assert b"250 releases" in response.data
+
+    def test_goals_past_goals_displayed(self, client, mocker):
+        """
+        Test that completed and missed goals are rendered under "past goals"
+        """
+        completed = Goal(
+            id=2,
+            start=datetime(2023, 1, 1),
+            end=datetime(2024, 1, 1),
+            completed=datetime(2023, 11, 2),
+            type="release",
+            amount=100,
+        )
+        missed = Goal(
+            id=3,
+            start=datetime(2022, 1, 1),
+            end=datetime(2023, 1, 1),
+            completed=None,
+            type="artist",
+            amount=50,
+        )
+        mocker.patch("databass.db.models.Goal.get_incomplete", return_value=[])
+        mocker.patch(
+            "databass.db.models.Goal.get_past", return_value=[completed, missed]
+        )
+        response = client.get("/goals")
+        assert response.status_code == 200
+        assert b"COMPLETE" in response.data
+        assert b"MISSED" in response.data
+        assert b"100 releases" in response.data
+        assert b"50 artists" in response.data
 
 
 class TestAddGoal:
