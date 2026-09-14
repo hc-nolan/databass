@@ -6,7 +6,7 @@
     <nav class="db-nav">
         <a href="/" class="{% if active_page == 'home' %}active{% endif %}">home</a>
         <a href="/new" class="{% if active_page == 'new' %}active{% endif %}">new</a>
-        <a href="/releases" class="{% if active_page in ('releases', 'artists', 'labels') %}active{% endif %}">browse</a>
+        <a href="/browse" class="{% if active_page == 'browse' %}active{% endif %}">browse</a>
         <a href="/stats" class="{% if active_page == 'stats' %}active{% endif %}">stats</a>
         <a href="/goals" class="{% if active_page == 'goals' %}active{% endif %}">goals</a>
     </nav>

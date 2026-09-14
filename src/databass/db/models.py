@@ -522,10 +522,14 @@ class Release(MusicBrainzEntity):
             return 0.0
 
     @classmethod
-    def rating_distribution(cls) -> dict:
+    def rating_distribution(cls, year: Optional[int] = None) -> dict:
         """
-        Buckets every release rating (stored 0-100) into ten deciles for a
+        Buckets release ratings (stored 0-100) into ten deciles for a
         histogram, and calculates the median.
+
+        Args:
+            year (int, optional): If given, only considers releases listened
+                to in that calendar year. Defaults to all-time.
 
         Returns:
             dict: {
@@ -533,7 +537,10 @@ class Release(MusicBrainzEntity):
                 "median": float, the median rating on the 0-10 display scale,
             }
         """
-        ratings = [row[0] for row in app_db.session.query(cls.rating).all()]
+        query = app_db.session.query(cls.rating)
+        if year is not None:
+            query = query.filter(extract("year", cls.listen_date) == year)
+        ratings = [row[0] for row in query.all()]
         buckets = [0] * 10
         if not ratings:
             return {"buckets": buckets, "median": 0.0}
@@ -547,6 +554,113 @@ class Release(MusicBrainzEntity):
         else:
             median = sorted_ratings[mid]
         return {"buckets": buckets, "median": round(median / 10, 1)}
+
+    @classmethod
+    def listen_years(cls) -> list[int]:
+        """Distinct calendar years with at least one logged listen, newest first."""
+        rows = (
+            app_db.session.query(extract("year", cls.listen_date).cast(Integer))
+            .distinct()
+            .all()
+        )
+        return sorted({int(row[0]) for row in rows if row[0] is not None}, reverse=True)
+
+    @classmethod
+    def stats_for_year(cls, year: Optional[int] = None) -> dict:
+        """
+        Aggregate release count, total runtime (hours), and mean rating
+        (0-10 scale) for a calendar year, or across all time if `year` is None.
+        """
+        query = app_db.session.query(
+            func.count(cls.id),
+            func.sum(cls.runtime),
+            func.avg(cls.rating),
+        )
+        if year is not None:
+            query = query.filter(extract("year", cls.listen_date) == year)
+        count, total_runtime, avg_rating = query.one()
+        return {
+            "count": count or 0,
+            "runtime_hours": round((total_runtime or 0) / 3600000, 1),
+            "mean_rating": round((avg_rating or 0) / 10, 1),
+        }
+
+    @classmethod
+    def days_span(cls, year: Optional[int] = None) -> int:
+        """
+        Number of days elapsed in a calendar year (up to today, if it's the
+        current year), or since the earliest logged listen if `year` is None.
+        """
+        today = date.today()
+        if year is not None:
+            start = date(year, 1, 1)
+            end = today if year == today.year else date(year, 12, 31)
+            return max((end - start).days + 1, 1)
+        earliest = app_db.session.query(func.min(cls.listen_date)).scalar()
+        if not earliest:
+            return 1
+        start = earliest.date() if hasattr(earliest, "date") else earliest
+        return max((today - start).days + 1, 1)
+
+    @classmethod
+    def listen_dates(cls, year: Optional[int] = None) -> list[date]:
+        """
+        Listen dates (one entry per logged listen, duplicates included) for a
+        calendar year, or across all time if `year` is None.
+        """
+        query = app_db.session.query(cls.listen_date)
+        if year is not None:
+            query = query.filter(extract("year", cls.listen_date) == year)
+        return [
+            row[0].date() if hasattr(row[0], "date") else row[0]
+            for row in query.all()
+            if row[0] is not None
+        ]
+
+    @classmethod
+    def listens_by_month(cls, year: int) -> list[dict]:
+        """
+        Monthly listen counts for a calendar year, from January up to the
+        current month if `year` is the current year, otherwise through December.
+        """
+        month_names = [
+            "JAN", "FEB", "MAR", "APR", "MAY", "JUN",
+            "JUL", "AUG", "SEP", "OCT", "NOV", "DEC",
+        ]
+        rows = (
+            app_db.session.query(
+                extract("month", cls.listen_date).cast(Integer).label("month"),
+                func.count(cls.id),
+            )
+            .filter(extract("year", cls.listen_date) == year)
+            .group_by("month")
+            .all()
+        )
+        counts = {int(month): count for month, count in rows}
+        today = date.today()
+        last_month = today.month if year == today.year else 12
+        return [
+            {"label": month_names[m - 1], "value": counts.get(m, 0)}
+            for m in range(1, last_month + 1)
+        ]
+
+    @classmethod
+    def listens_by_year(cls) -> list[dict]:
+        """Listen counts grouped by calendar year, ascending, across all time."""
+        rows = (
+            app_db.session.query(
+                extract("year", cls.listen_date).cast(Integer).label("year"),
+                func.count(cls.id),
+            )
+            .group_by("year")
+            .order_by("year")
+            .all()
+        )
+        return [
+            {"label": str(int(year)), "value": count}
+            for year, count in rows
+            if year is not None
+        ]
 
     @classmethod
     def dynamic_search(cls, data: dict) -> list[Release]:
@@ -770,6 +884,32 @@ class ArtistOrLabel(MusicBrainzEntity):
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}(id={self.id}, name='{self.name}')"
+
+    @classmethod
+    def period_counts(cls, year: Optional[int] = None) -> dict:
+        """
+        Distinct entity (Artist or Label) count and average releases per
+        entity, for a calendar year or across all time if `year` is None.
+
+        Returns:
+            dict: {"count": int, "avg_releases": float}
+        """
+        relation_id = (
+            Release.artist_id if cls.__tablename__ == "artist" else Release.label_id
+        )
+        query = (
+            app_db.session.query(relation_id, func.count(Release.id))
+            .join(cls, relation_id == cls.id)
+            .where(cls.name.notin_(["[NONE]", "Various Artists", "", "[no label]"]))
+            .group_by(relation_id)
+        )
+        if year is not None:
+            query = query.filter(extract("year", Release.listen_date) == year)
+        rows = query.all()
+        entity_count = len(rows)
+        total_releases = sum(row[1] for row in rows)
+        avg = round(total_releases / entity_count, 1) if entity_count else 0.0
+        return {"count": entity_count, "avg_releases": avg}
 
     @classmethod
     def frequency_highest(cls, limit: int = 10) -> list[dict]:
@@ -1251,20 +1391,55 @@ class Goal(Base):
             .scalar()
         )
 
+    @property
+    def new_artists_since_start_date(self):
+        """
+        Returns the count of distinct artists with a release logged (listen_date
+        greater than or equal to the start_date) since the Goal instance's start date.
+        """
+        return (
+            app_db.session.query(func.count(distinct(Release.artist_id)))
+            .filter(Release.listen_date >= self.start)
+            .scalar()
+        )
+
+    @property
+    def new_labels_since_start_date(self):
+        """
+        Returns the count of distinct labels with a release logged (listen_date
+        greater than or equal to the start_date) since the Goal instance's start date.
+        """
+        return (
+            app_db.session.query(func.count(distinct(Release.label_id)))
+            .filter(Release.listen_date >= self.start)
+            .scalar()
+        )
+
+    @property
+    def current_amount(self):
+        """
+        Returns the current progress towards the Goal, using the property matching its `type`.
+        """
+        match self.type:
+            case "artist":
+                return self.new_artists_since_start_date
+            case "label":
+                return self.new_labels_since_start_date
+            case _:
+                return self.new_releases_since_start_date
+
     def update_goal(self):
         """
-        Updates the `end_actual` attribute of the `Goal` instance if the number of new releases
+        Updates the `end_actual` attribute of the `Goal` instance if the current amount
         since the goal's `start_date` is greater than or equal to the `amount` attribute.
 
-        This method is used to check if a goal has been met, based on the number of new releases since
+        This method is used to check if a goal has been met, based on the current amount since
         the goal's start date. If the goal has been met, the `end_actual` attribute is updated
         to the current time.
         """
-        print(
-            f"Target amount: {self.amount} - Actual amount: {self.new_releases_since_start_date}"
-        )
-        if self.type == "release":
-            if self.new_releases_since_start_date >= self.amount:
+        print(f"Target amount: {self.amount} - Actual amount: {self.current_amount}")
+        if self.type in ("release", "artist", "label"):
+            if self.current_amount >= self.amount:
                 print("Updating end_actual to current time")
                 self.completed = datetime.now()
 
@@ -1287,6 +1462,22 @@ class Goal(Base):
         if results:
             return results
         return []
+
+    @classmethod
+    def get_past(cls) -> list[Goal]:
+        """
+        Query database for goals that are either completed, or incomplete with an
+        end date in the past (i.e. missed). Returns the goals newest-ended first.
+        """
+        try:
+            query = (
+                app_db.session.query(cls)
+                .where(or_(cls.completed.isnot(None), cls.end < datetime.now()))
+                .order_by(cls.end.desc())
+            )
+            return query.all()
+        except Exception:
+            return []
 
     @classmethod
     def check_goals(cls) -> None:
@@ -1329,6 +1520,22 @@ class Genre(Base):
     labels = relationship(
         "Label", secondary=label_genre_association, back_populates="genres"
     )
+
+    @classmethod
+    def top_by_release_count(cls, limit: int = 6) -> list[dict]:
+        """
+        Top genres by number of releases logged under them as their main
+        genre, all-time, most-listened first.
+        """
+        rows = (
+            app_db.session.query(cls.name, func.count(Release.id).label("count"))
+            .join(Release, Release.main_genre_id == cls.id)
+            .group_by(cls.name)
+            .order_by(func.count(Release.id).desc())
+            .limit(limit)
+            .all()
+        )
+        return [{"name": name, "count": count} for name, count in rows]
 
     @classmethod
     def get_distinct_column_values(cls, column: str) -> list:

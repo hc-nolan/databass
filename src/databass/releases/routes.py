@@ -200,37 +200,4 @@ def add_review(release_id):
 
 @release_bp.route("/releases", methods=["GET"])
 def releases():
-    genres = sorted(models.Genre.get_distinct_column_values("name"))
-    countries = sorted(models.Release.get_distinct_column_values("country"))
-    all_labels = sorted(models.Label.get_distinct_column_values("name"))
-    all_artists = sorted(models.Artist.get_distinct_column_values("name"))
-    all_releases = sorted(models.Release.get_distinct_column_values("name"))
-    data = {
-        "genres": genres,
-        "countries": countries,
-        "labels": all_labels,
-        "releases": all_releases,
-        "artists": all_artists,
-    }
-    return render_template("releases.html", data=data, active_page="releases")
-
-
-@release_bp.route("/release_search", methods=["POST"])
-def release_search():
-    from ..pagination import Pager
-
-    data = request.get_json()
-    print(data)
-    search_results = models.Release.dynamic_search(data)
-
-    page = Pager.get_page_param(request)
-    paged_data, flask_pagination = Pager.paginate(
-        per_page=15, current_page=page, data=search_results
-    )
-
-    return render_template(
-        "release_search.html",
-        data=paged_data,
-        data_full=search_results,
-        pagination=flask_pagination,
-    )
+    return redirect("/browse/releases", code=301)

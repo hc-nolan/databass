@@ -1,9 +1,8 @@
 from datetime import date
 from flask import Blueprint, render_template, request, flash, redirect
 from ..db.models import Artist
-from ..pagination import Pager
 from ..api.util import Util
-from ..db import construct_item, update
+from ..db import update
 
 artist_bp = Blueprint("artist_bp", __name__, template_folder="templates")
 
@@ -27,25 +26,7 @@ def artist(artist_id):
 
 @artist_bp.route("/artists", methods=["GET"])
 def artists():
-    countries = Artist.get_distinct_column_values("country")
-    data = {"countries": countries}
-    return render_template("artists.html", data=data, active_page="artists")
-
-
-@artist_bp.route("/artist_search", methods=["POST"])
-def artist_search():
-    data = request.get_json()
-    search_results = Artist.dynamic_search(data)
-    page = Pager.get_page_param(request)
-    paged_data, flask_pagination = Pager.paginate(
-        per_page=15, current_page=page, data=search_results
-    )
-    return render_template(
-        "artist_search.html",
-        data=paged_data,
-        data_full=search_results,
-        pagination=flask_pagination,
-    )
+    return redirect("/browse/artists", code=301)
 
 
 @artist_bp.route("/artist/<string:artist_id>/edit", methods=["GET", "POST"])

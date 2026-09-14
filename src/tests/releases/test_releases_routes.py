@@ -63,10 +63,10 @@ def mock_label_data(mocker):
 
 class TestReleases:
     # Tests for /releases
-    def test_releases_successful_page_load(self, client):
+    def test_releases_redirects_to_browse(self, client):
         response = client.get("/releases")
-        assert response.status_code == 200
-        assert b"release_search" in response.data
+        assert response.status_code == 301
+        assert response.headers["Location"] == "/browse/releases"
 
 
 class TestRelease:

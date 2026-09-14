@@ -6,7 +6,7 @@ Implements the main routes for the databass application, including
 - goals page
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from typing import Optional
 from os.path import join, abspath
 from glob import glob
@@ -26,8 +26,9 @@ import pycountry
 from .api import Util, MusicBrainz
 from . import db
 from .db import models
-from .db.util import get_all_stats, handle_submit_data
+from .db.util import handle_submit_data
 from .pagination import Pager
+from . import stats2
 
 
 def image_exists(itemtype: str, itemid: int) -> bool:
@@ -176,6 +177,54 @@ def get_release_data(data) -> dict:
     }
 
 
+def browse_filter_options(tab: str) -> dict:
+    """Distinct facet values available for the Browse page's given tab."""
+    if tab == "releases":
+        countries = sorted(c for c in models.Release.get_distinct_column_values("country") if c)
+        genres = sorted(models.Genre.get_distinct_column_values("name"))
+        return {
+            "countries": [(c, country_name(c)) for c in countries],
+            "genres": genres,
+        }
+    model = models.Artist if tab == "artists" else models.Label
+    countries = sorted(c for c in model.get_distinct_column_values("country") if c)
+    types = sorted(t for t in model.get_distinct_column_values("type") if t)
+    return {
+        "countries": [(c, country_name(c)) for c in countries],
+        "types": types,
+    }
+
+
+def build_browse_release_item(release: models.Release) -> dict:
+    """Build the template-ready dict for one Browse grid/list item (releases tab)."""
+    artist_name = release.artist.name if release.artist else None
+    meta = " · ".join(filter(None, [artist_name, str(release.year) if release.year else None]))
+    return {
+        "id": release.id,
+        "href": f"/release/{release.id}",
+        "name": release.name,
+        "meta": meta,
+        "score": round(release.rating / 10, 1),
+        "art_key": initials(artist_name or release.name),
+        "has_art": image_exists("release", release.id),
+        "art_type": "release",
+    }
+
+
+def build_browse_entity_item(row, entity_type: str) -> dict:
+    """Build the template-ready dict for one Browse grid/list item (artists/labels tab)."""
+    return {
+        "id": row.id,
+        "href": f"/{entity_type}/{row.id}",
+        "name": row.name,
+        "meta": f"{row.release_count} release{'s' if row.release_count != 1 else ''} · {country_name(row.country) or '—'}",
+        "score": round((row.average_rating or 0) / 10, 1),
+        "art_key": initials(row.name),
+        "has_art": image_exists(entity_type, row.id),
+        "art_type": entity_type,
+    }
+
+
 def register_routes(app):
     @app.route("/", methods=["GET"])
     @app.route("/home", methods=["GET"])
@@ -314,44 +363,148 @@ def register_routes(app):
 
         return redirect("/", code=302)
 
+    @app.route("/browse")
+    @app.route("/browse/<string:tab>")
+    def browse(tab="releases"):
+        if tab not in ("releases", "artists", "labels"):
+            abort(404)
+        counts = {
+            "releases": models.Release.total_count(),
+            "artists": models.Artist.total_count(),
+            "labels": models.Label.total_count(),
+        }
+        return render_template(
+            "browse.html",
+            active_page="browse",
+            tab=tab,
+            counts=counts,
+            filters=browse_filter_options(tab),
+        )
+
+    @app.route("/browse/<string:tab>/results")
+    def browse_results(tab):
+        if tab not in ("releases", "artists", "labels"):
+            abort(404)
+        q = request.args.get("q", "").strip()
+        country = request.args.get("country", "")
+        rating_min = request.args.get("rating_min", type=int)
+        page = max(request.args.get("page", 1, type=int), 1)
+        per_page = 30
+
+        if tab == "releases":
+            sort = request.args.get("sort", "listened")
+            genre = request.args.get("genre", "")
+            year_min = request.args.get("year_min", type=int)
+            rows, total = models.Release.browse_search(
+                q=q,
+                country=country,
+                genre=genre,
+                year_min=year_min,
+                rating_min=rating_min * 10 if rating_min else None,
+                sort=sort,
+                page=page,
+                per_page=per_page,
+            )
+            items = [build_browse_release_item(r) for r in rows]
+        else:
+            model = models.Artist if tab == "artists" else models.Label
+            sort = request.args.get("sort", "releases")
+            type_ = request.args.get("type", "")
+            releases_min = request.args.get("releases_min", type=int)
+            rows, total = model.browse_search(
+                q=q,
+                country=country,
+                type_=type_,
+                releases_min=releases_min,
+                rating_min=rating_min * 10 if rating_min else None,
+                sort=sort,
+                page=page,
+                per_page=per_page,
+            )
+            items = [build_browse_entity_item(r, tab[:-1]) for r in rows]
+
+        total_pages = max(-(-total // per_page), 1)
+        return render_template(
+            "browse_results.html",
+            items=items,
+            total=total,
+            page=page,
+            total_pages=total_pages,
+            tab=tab,
+        )
+
     @app.route("/stats", methods=["GET"])
     def stats():
-        statistics = get_all_stats()
-        return render_template("stats.html", data=statistics, active_page="stats")
+        periods = stats2.available_periods()
+        period = request.args.get("period") or (periods[0]["key"] if periods else "all")
+        return render_template(
+            "stats.html",
+            periods=periods,
+            active_period=period,
+            stats=stats2.get_period_stats(period),
+            genres=stats2.get_genre_shares(),
+            active_page="stats",
+        )
+
+    @app.route("/stats/period/<string:period>", methods=["GET"])
+    def stats_period(period):
+        return render_template("stats_period.html", stats=stats2.get_period_stats(period))
 
     @app.route("/stats/get/<string:stats_type>", methods=["GET"])
     def stats_get(stats_type):
-        statistics = get_all_stats()
-        data = ""
-        match stats_type:
-            case "labels":
-                most_freq = statistics.get("top_frequent_labels")
-                highest_avg = statistics.get("top_average_labels")
-                fav = statistics.get("top_rated_labels")
-            case "artists":
-                most_freq = statistics.get("top_frequent_artists")
-                highest_avg = statistics.get("top_average_artists")
-                fav = statistics.get("top_rated_artists")
-            case _:
-                most_freq = None
-                highest_avg = None
-                fav = None
-        data = {
-            "most_frequent": most_freq,
-            "highest_average": highest_avg,
-            "favourite": fav,
-        }
-        return render_template("stats_data.html", type=stats_type, stats=data)
+        entity = models.Label if stats_type == "labels" else models.Artist
+        boards = stats2.build_leaderboards(entity)
+        return render_template("stats_data.html", type=stats_type, boards=boards)
 
     @app.route("/goals", methods=["GET"])
     def goals():
         if request.method != "GET":
             abort(405)
-        existing_goals = models.Goal.get_incomplete()
-        if existing_goals is None:
-            existing_goals = []
-        data = {"today": Util.today(), "existing_goals": existing_goals}
-        return render_template("goals.html", active_page="goals", data=data)
+
+        incomplete_goals = models.Goal.get_incomplete() or []
+        active_goal = (
+            build_active_goal_view(incomplete_goals[0]) if incomplete_goals else None
+        )
+        past_goals = [build_past_goal_view(g) for g in models.Goal.get_past()]
+        current_pace = models.Release.added_per_day_this_year()
+
+        today_date = datetime.now().date()
+        next_new_year = date(today_date.year + 1, 1, 1)
+        goal_presets = [
+            {
+                "label": "365 in a year",
+                "amount": 365,
+                "end": (today_date + timedelta(days=365)).isoformat(),
+            },
+            {
+                "label": "100 by new year",
+                "amount": 100,
+                "end": next_new_year.isoformat(),
+            },
+            {
+                "label": "1000 in a year",
+                "amount": 1000,
+                "end": (today_date + timedelta(days=365)).isoformat(),
+            },
+        ]
+        goal_types = [
+            {"value": "release", "label": "releases"},
+            {"value": "artist", "label": "artists"},
+            {"value": "label", "label": "labels"},
+        ]
+
+        return render_template(
+            "goals.html",
+            active_page="goals",
+            active_goal=active_goal,
+            past_goals=past_goals,
+            current_pace=current_pace,
+            today=Util.today(),
+            default_amount=100,
+            default_end=(today_date + timedelta(days=90)).isoformat(),
+            goal_presets=goal_presets,
+            goal_types=goal_types,
+        )
 
     @app.route("/add_goal", methods=["POST"])
     def add_goal():
@@ -465,4 +618,133 @@ def process_goal_data(goal: models.Goal):
         "target": target,
         "current": current,
         "days_left": days_left,
+    }
+
+
+GOAL_TYPE_LABELS = {"release": "releases", "artist": "artists", "label": "labels"}
+
+
+def _goal_type_label(goal_type: str) -> str:
+    return GOAL_TYPE_LABELS.get(goal_type, "releases")
+
+
+def build_active_goal_view(goal: "models.Goal") -> dict:
+    """
+    Builds the view model for the "active goal" hero card on the Goals page,
+    covering progress-to-date, pace, and a plain-language projection of
+    where the goal will land if the current pace holds.
+    """
+    today = datetime.now()
+    start, end = goal.start, goal.end
+    actual = goal.current_amount
+    target = goal.amount
+    type_label = _goal_type_label(goal.type)
+
+    days_total = max((end - start).days, 1)
+    days_elapsed = min(max((today - start).days, 1), days_total)
+    days_left = max((end - today).days, 0)
+
+    pace = actual / days_elapsed if days_elapsed else 0
+    expected = round(target * (days_elapsed / days_total))
+    behind = expected - actual
+    needed = (target - actual) / days_left if days_left else 0
+    projected = round(actual + pace * days_left)
+
+    if projected >= target:
+        spare = projected - target
+        projection = (
+            f"At {pace:.2f} / day you're on pace to clear this goal"
+            + (f", with {spare} to spare." if spare > 0 else ".")
+        )
+    else:
+        shortfall = target - projected
+        if pace > 0:
+            new_deadline = today + timedelta(days=(target - actual) / pace)
+            deadline_text = (
+                f"moving the deadline to {new_deadline:%d %b %Y} keeps the pace "
+                "you actually have."
+            )
+        else:
+            deadline_text = "you'll need to start logging to make any progress."
+        projection = (
+            f"At {pace:.2f} / day you finish on {projected} — {shortfall} short. "
+            f"Picking up the pace on {shortfall} of the remaining {days_left} days "
+            f"closes the gap; otherwise {deadline_text}"
+        )
+
+    return {
+        "status": "BEHIND PACE" if behind > 0 else "ON TRACK",
+        "on_track": behind <= 0,
+        "window": f"{start:%d %b %Y} → {end:%d %b %Y} · {days_left} days left",
+        "actual": actual,
+        "target": target,
+        "type_label": type_label,
+        "percent": round((actual / target) * 100) if target else 0,
+        "progress_w": min(round((actual / target) * 100), 100) if target else 0,
+        "pace_w": min(round((days_elapsed / days_total) * 100), 100),
+        "progress_label": f"{actual} logged",
+        "pace_label": (
+            f"even pace would be {expected} by today — you're {abs(behind)} "
+            f"{'behind' if behind > 0 else 'ahead'}"
+        ),
+        "metrics": [
+            {
+                "label": "REMAINING",
+                "value": max(target - actual, 0),
+                "sub": type_label,
+                "tone": "ink",
+            },
+            {
+                "label": "DAYS LEFT",
+                "value": days_left,
+                "sub": f"to {end:%d %b}",
+                "tone": "ink",
+            },
+            {
+                "label": "NEEDED / DAY",
+                "value": f"{needed:.2f}",
+                "sub": "from here on",
+                "tone": "amber",
+            },
+            {
+                "label": "CURRENT PACE",
+                "value": f"{pace:.2f}",
+                "sub": "since goal start",
+                "tone": "ink",
+            },
+            {
+                "label": "PROJECTED",
+                "value": projected,
+                "sub": "clears the goal" if projected >= target else f"{target - projected} short",
+                "tone": "cyan" if projected >= target else "red",
+            },
+        ],
+        "projection": projection,
+    }
+
+
+def build_past_goal_view(goal: "models.Goal") -> dict:
+    """Builds the view model for a single row in the Goals page's "past goals" list."""
+    actual = goal.current_amount
+    target = goal.amount
+    pct = round((actual / target) * 100) if target else 0
+    type_label = _goal_type_label(goal.type)
+
+    if goal.completed:
+        days_early = (goal.end - goal.completed).days
+        result = f"hit on {goal.completed:%d %b %Y}" + (
+            f" · {days_early} days early" if days_early > 0 else ""
+        )
+        badge, tone = "COMPLETE", "cyan"
+    else:
+        result = f"{actual:,} of {target:,} · {pct}%"
+        badge, tone = "MISSED", "red"
+
+    return {
+        "title": f"{target:,} {type_label}",
+        "window": f"{goal.start:%d %b %Y} → {goal.end:%d %b %Y}",
+        "w": min(pct, 100),
+        "result": result,
+        "badge": badge,
+        "tone": tone,
     }

@@ -1503,6 +1503,42 @@ class TestGoalNewReleasesSinceStartDate:
         assert result == count_value
 
 
+class TestGoalCurrentAmount:
+    """Test suite for Goal.current_amount property dispatch"""
+
+    @pytest.mark.parametrize(
+        "goal_type,property_name",
+        [
+            ("release", "new_releases_since_start_date"),
+            ("artist", "new_artists_since_start_date"),
+            ("label", "new_labels_since_start_date"),
+        ],
+    )
+    def test_current_amount_dispatches_by_type(
+        self, mocker, goal_type, property_name
+    ):
+        """Test that current_amount reads the property matching the goal's type"""
+        goal = Goal(start=datetime.now(), type=goal_type)
+        mocker.patch.object(
+            type(goal),
+            property_name,
+            new_callable=mocker.PropertyMock,
+            return_value=7,
+        )
+        assert goal.current_amount == 7
+
+
+class TestGoalGetPast:
+    """Test suite for Goal.get_past classmethod"""
+
+    def test_get_past_returns_empty_list_on_error(self, mocker):
+        """Test that get_past returns an empty list if the query raises"""
+        mocker.patch(
+            "databass.db.base.app_db.session.query", side_effect=Exception("boom")
+        )
+        assert Goal.get_past() == []
+
+
 class TestGenreCreateGenres:
     """Test suite for Genre.create_genres static method"""
 

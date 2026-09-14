@@ -2,10 +2,38 @@
 {% if data %}
 <div id="data_form" class="new-results-list">
     <div class="new-results__meta">
-        <span>{{ data|length }} result{{ 's' if data|length != 1 else '' }}</span>
+        <span id="new-results-count">{{ data|length }} result{{ 's' if data|length != 1 else '' }}</span>
         <span class="new-results__meta-sep">·</span>
         <span>duplicates of releases you already logged are marked</span>
     </div>
+    <div class="new-results__filters">
+        <input type="text" id="rf-title" class="field new-results__filter" placeholder="filter by title">
+        <select id="rf-artist" class="field new-results__filter">
+            <option value="">artist: any</option>
+            {% for v in data | map(attribute='artist') | map(attribute='name') | select | unique | sort %}
+            <option value="{{ v }}">{{ v }}</option>
+            {% endfor %}
+        </select>
+        <select id="rf-year" class="field new-results__filter">
+            <option value="">year: any</option>
+            {% for v in data | map(attribute='date') | select | unique | sort(reverse=True) %}
+            <option value="{{ v }}">{{ v }}</option>
+            {% endfor %}
+        </select>
+        <select id="rf-format" class="field new-results__filter">
+            <option value="">format: any</option>
+            {% for v in data | map(attribute='format') | select | unique | sort %}
+            <option value="{{ v }}">{{ v }}</option>
+            {% endfor %}
+        </select>
+        <select id="rf-country" class="field new-results__filter">
+            <option value="">country: any</option>
+            {% for v in data | map(attribute='country') | select | unique | sort %}
+            <option value="{{ v }}">{{ v }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div id="new-results-items">
     {% for item in data %}
     <article class="result-row{% if item.logged %} result-row--logged{% endif %}" data-item='{{ item | tojson | safe }}' tabindex="0">
         {{ components.art(false, '', item.initials, 'result-row__art') }}
@@ -28,6 +56,8 @@
         </div>
     </article>
     {% endfor %}
+    </div>
+    <p id="new-results-empty" class="new-results__empty" hidden>No results match those filters.</p>
 </div>
 {% else %}
 {% include 'new_manual_entry.html' %}

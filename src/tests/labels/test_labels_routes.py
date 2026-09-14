@@ -13,27 +13,10 @@ def client():
 
 class TestLabels:
     # Tests for /labels
-    def test_labels_successful_page_load(self, client, mocker):
-        """
-        Test for successful page load
-        """
-
-        def mock_get_distinct_column_values(column_name):
-            if column_name == "country":
-                return ["US", "UK"]
-            elif column_name == "type":
-                return ["Original Production", "Imprint"]
-
-        mock_db = mocker.patch(
-            "databass.db.models.Label.get_distinct_column_values",
-            side_effect=mock_get_distinct_column_values,
-        )
+    def test_labels_redirects_to_browse(self, client):
         response = client.get("/labels")
-        assert response.status_code == 200
-        assert b"label_search" in response.data
-        assert b"US" in response.data
-        assert b"Imprint" in response.data
-        assert mock_db.call_count == 2
+        assert response.status_code == 301
+        assert response.headers["Location"] == "/browse/labels"
 
 
 class TestLabel:

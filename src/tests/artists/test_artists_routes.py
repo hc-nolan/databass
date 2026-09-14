@@ -13,15 +13,10 @@ def client():
 
 class TestArtists:
     # Tests for /artists
-    def test_artists_successful_page_load(self, client, mocker):
-        mock_db = mocker.patch(
-            "databass.db.models.Artist.get_distinct_column_values",
-            return_value=["US", "UK"],
-        )
+    def test_artists_redirects_to_browse(self, client):
         response = client.get("/artists")
-        assert response.status_code == 200
-        assert b"UK" in response.data
-        assert b"artist_search" in response.data
+        assert response.status_code == 301
+        assert response.headers["Location"] == "/browse/artists"
 
 
 class TestArtist:

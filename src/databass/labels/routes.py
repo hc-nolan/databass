@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, flash, redirect
 from datetime import date
 from ..db.models import Label
-from ..db import construct_item, update
+from ..db import update
 from ..api.util import Util
 
 label_bp = Blueprint("label_bp", __name__, template_folder="templates")
@@ -24,28 +24,7 @@ def label(label_id):
 
 @label_bp.route("/labels", methods=["GET"])
 def labels():
-    countries = Label.get_distinct_column_values("country")
-    types = Label.get_distinct_column_values("type")
-    data = {"countries": countries, "types": types}
-    return render_template("labels.html", data=data, active_page="labels")
-
-
-@label_bp.route("/label_search", methods=["POST"])
-def label_search():
-    from ..pagination import Pager
-
-    data = request.get_json()
-    search_results = Label.dynamic_search(data)
-    page = Pager.get_page_param(request)
-    paged_data, flask_pagination = Pager.paginate(
-        per_page=15, current_page=page, data=search_results
-    )
-    return render_template(
-        "label_search.html",
-        data=paged_data,
-        data_full=search_results,
-        pagination=flask_pagination,
-    )
+    return redirect("/browse/labels", code=301)
 
 
 @label_bp.route("/label/<string:label_id>/edit", methods=["GET", "POST"])

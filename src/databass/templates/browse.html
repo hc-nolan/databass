@@ -1,0 +1,91 @@
+{% extends '_base.html' %}
+{% block content %}
+<div class="db-page db-page--browse" id="browse_page" data-tab="{{ tab }}">
+    <main class="browse-main">
+
+        <div class="browse-tabs">
+            {% for t in ('releases', 'artists', 'labels') %}
+            <a href="/browse/{{ t }}" class="browse-tab {% if tab == t %}is-active{% endif %}">
+                {{ t }}<span class="browse-tab__count">{{ '{:,}'.format(counts[t]) }}</span>
+            </a>
+            {% endfor %}
+        </div>
+
+        <section class="card browse-search">
+            <input type="text" id="browse-q" class="field browse-search__input"
+                   placeholder="{% if tab == 'releases' %}search release or artist{% else %}search {{ tab[:-1] }}{% endif %}">
+
+            <div class="browse-facets">
+                <select id="browse-country" class="field browse-facet">
+                    <option value="">country: any</option>
+                    {% for code, name in filters.countries %}
+                    <option value="{{ code }}">{{ name }}</option>
+                    {% endfor %}
+                </select>
+
+                {% if tab == 'releases' %}
+                <select id="browse-genre" class="field browse-facet">
+                    <option value="">genre: any</option>
+                    {% for g in filters.genres %}
+                    <option value="{{ g }}">{{ g }}</option>
+                    {% endfor %}
+                </select>
+                <select id="browse-year-min" class="field browse-facet">
+                    <option value="">year: any</option>
+                    <option value="2020">2020s+</option>
+                    <option value="2010">2010s+</option>
+                    <option value="2000">2000s+</option>
+                    <option value="1990">1990s+</option>
+                    <option value="1980">1980s+</option>
+                    <option value="1970">1970s+</option>
+                </select>
+                {% else %}
+                <select id="browse-type" class="field browse-facet">
+                    <option value="">type: any</option>
+                    {% for t in filters.types %}
+                    <option value="{{ t }}">{{ t }}</option>
+                    {% endfor %}
+                </select>
+                <select id="browse-releases-min" class="field browse-facet">
+                    <option value="">releases: any</option>
+                    <option value="3">3+</option>
+                    <option value="5">5+</option>
+                    <option value="10">10+</option>
+                    <option value="20">20+</option>
+                </select>
+                {% endif %}
+
+                <select id="browse-rating-min" class="field browse-facet">
+                    <option value="">rating: any</option>
+                    <option value="9">9+</option>
+                    <option value="8">8+</option>
+                    <option value="7">7+</option>
+                    <option value="6">6+</option>
+                    <option value="5">5+</option>
+                </select>
+            </div>
+
+            <div class="browse-views">
+                <button type="button" class="browse-view-btn is-active" id="browse-view-grid" data-view="grid">GRID</button>
+                <button type="button" class="browse-view-btn" id="browse-view-list" data-view="list">LIST</button>
+            </div>
+        </section>
+
+        <div class="browse-sorts">
+            <span class="browse-sorts__label">SORT</span>
+            {% if tab == 'releases' %}
+            <button type="button" class="browse-sort is-active" data-sort="listened">listened &darr;</button>
+            <button type="button" class="browse-sort" data-sort="rating">rating &darr;</button>
+            <button type="button" class="browse-sort" data-sort="year">year &darr;</button>
+            <button type="button" class="browse-sort" data-sort="az">a&ndash;z</button>
+            {% else %}
+            <button type="button" class="browse-sort is-active" data-sort="releases">releases &darr;</button>
+            <button type="button" class="browse-sort" data-sort="rating">avg rating &darr;</button>
+            <button type="button" class="browse-sort" data-sort="az">a&ndash;z</button>
+            {% endif %}
+        </div>
+
+        <div id="browse-results" class="browse-results"></div>
+    </main>
+</div>
+{% endblock %}
