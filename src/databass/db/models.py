@@ -1407,10 +1407,14 @@ class Artist(ArtistOrLabel):
         """
         This artist's full discography: releases they're the primary credit
         for, plus releases manually credited to them as a collaborator (see
-        `release_collab_association`), newest listen first.
+        `release_collab_association`), newest listen first (ties broken by
+        id, consistent with Release.home_data_light / build_day_groups).
+
+        Deduped in case a release's own primary artist is also (redundantly)
+        added as one of its collab artists.
         """
-        combined = list(self.releases) + list(self.collab_releases)
-        return sorted(combined, key=lambda r: r.listen_date, reverse=True)
+        combined = dict.fromkeys([*self.releases, *self.collab_releases])
+        return sorted(combined, key=lambda r: (r.listen_date, r.id), reverse=True)
 
 
 class Goal(Base):

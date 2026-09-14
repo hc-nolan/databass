@@ -141,14 +141,16 @@ def edit(release_id):
         # include this release, alongside its primary artist
         try:
             collab_artists = edit_data["collab_artists"]
-            if collab_artists:
-                collab_objs = []
-                for name in collab_artists.split(","):
-                    name = name.strip()
-                    if name:
-                        collab_id = models.Artist.create_if_not_exist(name)
-                        collab_objs.append(models.Artist.exists_by_id(collab_id))
-                submit_data["collab_artists"] = collab_objs
+            collab_objs = []
+            for name in collab_artists.split(","):
+                name = name.strip()
+                if name:
+                    collab_id = models.Artist.create_if_not_exist(name)
+                    collab_objs.append(models.Artist.exists_by_id(collab_id))
+            # unlike genres, an empty submission here is meaningful: it's how
+            # a collab credit gets removed, so always write the (possibly
+            # empty) list rather than only when non-empty
+            submit_data["collab_artists"] = collab_objs
         except KeyError:
             pass
 

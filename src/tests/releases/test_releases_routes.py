@@ -174,6 +174,56 @@ class TestEdit:
         assert response.location == "/"
         assert b"You should be redirected automatically" in response.data
 
+    def test_edit_post_sets_collab_artists(self, client, mock_release_data, mocker):
+        """
+        Test that submitting collab_artists resolves each name to an Artist
+        via create_if_not_exist and includes them in the submitted data
+        """
+        mock_construct = mocker.patch(
+            "databass.db.construct_item", return_value=mock_release_data
+        )
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        mocker.patch("databass.db.update")
+        mock_create = mocker.patch(
+            "databass.db.models.Artist.create_if_not_exist", return_value=2
+        )
+        mock_artist = mocker.MagicMock()
+        mocker.patch(
+            "databass.db.models.Artist.exists_by_id", return_value=mock_artist
+        )
+
+        response = client.post(
+            "/release/1/edit", data={"collab_artists": "Ghostface Killah"}
+        )
+
+        assert response.status_code == 302
+        mock_create.assert_called_once_with("Ghostface Killah")
+        submit_data = mock_construct.call_args[0][1]
+        assert submit_data["collab_artists"] == [mock_artist]
+
+    def test_edit_post_clears_collab_artists_when_field_empty(
+        self, client, mock_release_data, mocker
+    ):
+        """
+        Test that submitting an empty collab_artists field clears any
+        previously-set collab credits, rather than leaving them untouched
+        """
+        mock_construct = mocker.patch(
+            "databass.db.construct_item", return_value=mock_release_data
+        )
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        mocker.patch("databass.db.update")
+
+        response = client.post("/release/1/edit", data={"collab_artists": ""})
+
+        assert response.status_code == 302
+        submit_data = mock_construct.call_args[0][1]
+        assert submit_data["collab_artists"] == []
+
     def test_edit_post_failure_non_existing_release(self, client, mocker):
         """
         Test for successful handling of a POST request to a release that does not exist

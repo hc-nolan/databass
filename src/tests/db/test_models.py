@@ -1650,3 +1650,23 @@ class TestArtistAllReleases:
         artist.collab_releases = []
 
         assert artist.all_releases == []
+
+    def test_dedupes_release_credited_both_ways(self):
+        """A release doesn't appear twice if it's redundantly in both releases and collab_releases"""
+        artist = Artist(name="Ghostface Killah")
+        release = Release(name="Sour Soul", listen_date=datetime(2024, 6, 1))
+        artist.releases = [release]
+        artist.collab_releases = [release]
+
+        assert artist.all_releases == [release]
+
+    def test_breaks_same_day_ties_by_id_descending(self):
+        """Releases listened to on the same day are ordered by id descending"""
+        artist = Artist(name="Artist")
+        same_day = datetime(2024, 6, 1)
+        older = Release(id=1, name="First Logged", listen_date=same_day)
+        newer = Release(id=2, name="Second Logged", listen_date=same_day)
+        artist.releases = [older, newer]
+        artist.collab_releases = []
+
+        assert artist.all_releases == [newer, older]
