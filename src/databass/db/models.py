@@ -647,13 +647,17 @@ class Release(MusicBrainzEntity):
     @classmethod
     def listens_by_year(cls) -> list[dict]:
         """Listen counts grouped by calendar year, ascending, across all time."""
+        # Group/order by the expression itself rather than the "year" label: Release
+        # already has a real `year` column, and Postgres (unlike SQLite) resolves a
+        # bare "year" reference in GROUP BY/ORDER BY to that column, not this alias.
+        year_expr = extract("year", cls.listen_date).cast(Integer)
         rows = (
             app_db.session.query(
-                extract("year", cls.listen_date).cast(Integer).label("year"),
+                year_expr.label("year"),
                 func.count(cls.id),
             )
-            .group_by("year")
-            .order_by("year")
+            .group_by(year_expr)
+            .order_by(year_expr)
             .all()
         )
         return [
