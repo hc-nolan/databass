@@ -3,12 +3,13 @@ function handleDeleteButton(deleteButton) {
     let itemType = deleteButton.getAttribute('data-type');
     const popup = document.createElement('div');
     popup.className = 'popup';
-    popup.id = 'delete_popup';
     popup.innerHTML = `
+    <div id="delete_popup">
     <p>Are you sure?&nbsp;This cannot be undone.</p>
     <div class="popup-actions">
     <button id="confirm" class="btn-primary btn-primary--danger">delete</button>
     <button id="cancel" class="btn-ghost">cancel</button>
+    </div>
     </div>
     `;
     document.body.appendChild(popup);
@@ -545,7 +546,6 @@ function editEntity(editButton, entityType) {
         .then(response => response.text())
         .then(html => {
             let popup = document.createElement('div');
-            popup.id = 'edit_popup';
             popup.className = 'popup';
             popup.innerHTML = html;
             document.body.appendChild(popup);
