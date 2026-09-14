@@ -1628,3 +1628,25 @@ class TestGenreCreateGenres:
                 mocker.call("genre", {"name": " electronic"}),
             ]
             mock_construct.assert_has_calls(expected_calls)
+
+
+class TestArtistAllReleases:
+    """Test suite for Artist.all_releases property"""
+
+    def test_combines_own_and_collab_releases_newest_first(self):
+        """all_releases merges releases and collab_releases, sorted by listen_date desc"""
+        artist = Artist(name="Ghostface Killah")
+        own = Release(name="Supreme Clientele", listen_date=datetime(2024, 1, 1))
+        collab = Release(name="Sour Soul", listen_date=datetime(2024, 6, 1))
+        artist.releases = [own]
+        artist.collab_releases = [collab]
+
+        assert artist.all_releases == [collab, own]
+
+    def test_returns_empty_list_when_no_releases(self):
+        """all_releases is an empty list when the artist has no own or collab releases"""
+        artist = Artist(name="No Releases")
+        artist.releases = []
+        artist.collab_releases = []
+
+        assert artist.all_releases == []

@@ -137,6 +137,21 @@ def edit(release_id):
         except KeyError:
             pass
 
+        # collab artists: additional artists whose discography should
+        # include this release, alongside its primary artist
+        try:
+            collab_artists = edit_data["collab_artists"]
+            if collab_artists:
+                collab_objs = []
+                for name in collab_artists.split(","):
+                    name = name.strip()
+                    if name:
+                        collab_id = models.Artist.create_if_not_exist(name)
+                        collab_objs.append(models.Artist.exists_by_id(collab_id))
+                submit_data["collab_artists"] = collab_objs
+        except KeyError:
+            pass
+
         updated_release = db.construct_item("release", submit_data)
         # construct_item() will produce a unique ID primary key, so we need to set it to the original one for update() to work
         try:
