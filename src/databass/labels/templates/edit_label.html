@@ -1,35 +1,36 @@
-<div>
-    <div id="top" class="pure-g">
-        <h1 class="pure-u-1-3">EDIT</h1>
-        <div class="pure-u-1-4"><button id="edit_submit" type="submit" form="edit_form" class="pure-button">submit</button></div>
-        <div class="pure-u-1-4"><button id="edit_cancel" class="pure-button">cancel</button></div>
+<div id="edit_popup">
+    <div class="popup-head">
+        <span class="eyebrow eyebrow--amber">EDIT LABEL</span>
+        <button type="button" id="edit_cancel" class="btn-ghost">cancel</button>
     </div>
-    <div id="bottom">
-        <form id="edit_form" method="POST" action="/label/{{ label.id }}/edit" class="pure-form">
-            <div class="pure-g">
-                <label for="begin" class="pure-u-1-3">begin</label>
-                <input id="begin" name="begin" value="{{ label.begin }}" type="date" class="pure-u-2-3">
-            </div>
+    <form id="edit_form" method="POST" action="/label/{{ label.id }}/edit" class="popup-form">
+        <div>
+            <label for="begin" class="field-label">begin</label>
+            <input id="begin" name="begin" value="{{ label.begin }}" type="date" class="field">
+        </div>
 
-            <div class="pure-g">
-                <label for="end" class="pure-u-1-3">end</label>
-                <input id="end" name="end" value="{{ label.end }}" type="date" class="pure-u-2-3">
-            </div>
+        <div>
+            <label for="end" class="field-label">end</label>
+            <input id="end" name="end" value="{{ label.end }}" type="date" class="field">
+        </div>
 
-            <div class="pure-g">
-                <label for="image" class="pure-u-1-3">image</label>
-                <input id="image" name="image" placeholder="<url>" type="url" class="pure-u-2-3">
-            </div>
+        <div>
+            <label for="image" class="field-label">image</label>
+            <input id="image" name="image" placeholder="<url>" type="url" class="field">
+        </div>
 
-            <div class="pure-g">
-                <label for="country" class="pure-u-1-3">country</label>
-                <select id="country" name="country" class="pure-u-2-3">
-                    <option value="" disabled selected></option>
-                    {% for country in countries %}
-                        <option value="{{ country}}">{{ country|country_name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-        </form>
-    </div>
+        <div>
+            <label for="country" class="field-label">country</label>
+            <select id="country" name="country" class="field">
+                <option value="" disabled selected></option>
+                {% for country in countries %}
+                    <option value="{{ country}}">{{ country|country_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="popup-actions">
+            <button id="edit_submit" type="submit" form="edit_form" class="btn-primary">submit</button>
+        </div>
+    </form>
 </div>

@@ -77,10 +77,13 @@ def build_release_detail(release: models.Release) -> dict:
     label = release.label
     has_artist = artist and artist.name not in EXCLUDED_NAMES
     has_label = label and label.name not in EXCLUDED_NAMES
+    collab_artists = [a for a in release.collab_artists if a.name not in EXCLUDED_NAMES]
 
     links = []
     if has_artist:
         links.append({"name": artist.name, "href": f"/artist/{artist.id}"})
+    for collab in collab_artists:
+        links.append({"name": collab.name, "href": f"/artist/{collab.id}"})
     if has_label:
         links.append({"name": label.name, "href": f"/label/{label.id}"})
 
@@ -160,14 +163,14 @@ def build_release_detail(release: models.Release) -> dict:
         context.append({"label": "days since last listen", "value": str(days_since)})
 
     rails = []
-    if has_artist:
-        artist_items = [r for r in artist.releases if r.id != release.id]
+    for credited_artist in ([artist] if has_artist else []) + collab_artists:
+        artist_items = [r for r in credited_artist.all_releases if r.id != release.id]
         items = _release_rail_items(artist_items, lambda r: f"{r.year} · {_score(r.rating)}")
         if items:
             noun = "release" if len(items) == 1 else "releases"
             rails.append(
                 {
-                    "title": f"ALSO BY {artist.name.upper()}",
+                    "title": f"ALSO BY {credited_artist.name.upper()}",
                     "note": f"{len(items)} {noun} logged",
                     "items": items,
                 }
@@ -216,7 +219,7 @@ def build_release_detail(release: models.Release) -> dict:
 
 
 def build_artist_detail(artist: models.Artist) -> dict:
-    releases = list(artist.releases)
+    releases = artist.all_releases
     ratings = [r.rating for r in releases]
     listen_dates = [r.listen_date for r in releases if r.listen_date]
 

@@ -1,50 +1,55 @@
-<div>
-    <div id="top" class="pure-g">
-        <h1 class="pure-u-1-3">EDIT</h1>
-        <div class="pure-u-1-4"><button id="edit_submit" type="submit" form="edit_form" class="pure-button">submit</button></div>
-        <div class="pure-u-1-4"><button id="edit_cancel" class="pure-button">cancel</button></div>
+<div id="edit_popup">
+    <div class="popup-head">
+        <span class="eyebrow eyebrow--amber">EDIT RELEASE</span>
+        <button type="button" id="edit_cancel" class="btn-ghost">cancel</button>
     </div>
-    <div id="bottom">
-        <form id="edit_form" method="POST" action="/release/{{ release.id }}/edit" class="pure-form">
-            <div class="pure-g">
-                <label for="year" class="pure-u-1-3">year</label>
-                <input id="year" name="year" value="{{ release.year }}" type="number" class="pure-u-2-3">
-            </div>
+    <form id="edit_form" method="POST" action="/release/{{ release.id }}/edit" class="popup-form">
+        <div>
+            <label for="year" class="field-label">year</label>
+            <input id="year" name="year" value="{{ release.year }}" type="number" class="field">
+        </div>
 
-            <div class="pure-g">
-                <label for="main_genre" class="pure-u-1-3">main genre</label>
-                <input id="main_genre" name="main_genre" value="{{ release.main_genre.name }}" class="pure-u-2-3">
-            </div>
+        <div>
+            <label for="main_genre" class="field-label">main genre</label>
+            <input id="main_genre" name="main_genre" value="{{ release.main_genre.name }}" class="field">
+        </div>
 
-            <div class="pure-g">
-                <label for="rating" class="pure-u-1-3">rating</label>
-                <input id="rating" name="rating" value="{{ release.rating }}" type="number" class="pure-u-2-3">
-            </div>
+        <div>
+            <label for="rating" class="field-label">rating</label>
+            <input id="rating" name="rating" value="{{ release.rating }}" type="number" class="field">
+        </div>
 
-            <div class="pure-g">
-                <label for="image" class="pure-u-1-3">image</label>
-                <input id="image" name="image" placeholder="<url>" type="url" class="pure-u-2-3">
-            </div>
+        <div>
+            <label for="image" class="field-label">image</label>
+            <input id="image" name="image" placeholder="<url>" type="url" class="field">
+        </div>
 
-            <div class="pure-g">
-                <label for="listen_date" class="pure-u-1-3">listen date</label>
-                <input id="listen_date" name="listen_date" value="{{ release.listen_date.strftime('%Y-%m-%d') }}" type="date" class="pure-u-2-3">
-            </div>
+        <div>
+            <label for="listen_date" class="field-label">listen date</label>
+            <input id="listen_date" name="listen_date" value="{{ release.listen_date.strftime('%Y-%m-%d') }}" type="date" class="field">
+        </div>
 
-            <div class="pure-g">
-                <label for="country" class="pure-u-1-3">country</label>
-                <select id="country" name="country" class="pure-u-2-3">
-                    {% for country in countries %}
-                        <option value="{{ country}}">{{ country|country_name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
+        <div>
+            <label for="country" class="field-label">country</label>
+            <select id="country" name="country" class="field">
+                {% for country in countries %}
+                    <option value="{{ country}}">{{ country|country_name }}</option>
+                {% endfor %}
+            </select>
+        </div>
 
-            <div class="pure-g">
-                <label for="genres" class="pure-u-1-3">genres</label>
-                <input id="genres" name="genres" class="pure-u-2-3" value="{% for g in release.genres %}{{ g.name }}{% if not loop.last %}, {% endif %}{% endfor %}">
-            </div>
+        <div>
+            <label for="genres" class="field-label">genres</label>
+            <input id="genres" name="genres" class="field" value="{% for g in release.genres %}{{ g.name }}{% if not loop.last %}, {% endif %}{% endfor %}">
+        </div>
 
-        </form>
-    </div>
+        <div>
+            <label for="collab_artists" class="field-label">collab artists</label>
+            <input id="collab_artists" name="collab_artists" class="field" placeholder="also credit to these artists' discographies" value="{% for a in release.collab_artists %}{{ a.name }}{% if not loop.last %}, {% endif %}{% endfor %}">
+        </div>
+
+        <div class="popup-actions">
+            <button id="edit_submit" type="submit" form="edit_form" class="btn-primary">submit</button>
+        </div>
+    </form>
 </div>

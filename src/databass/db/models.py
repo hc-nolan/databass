@@ -126,6 +126,18 @@ release_genre_association = Table(
     Column("genre_id", ForeignKey("genre.id"), primary_key=True),
 )
 
+# Manually-declared collaboration credits: lets a release be included in an
+# artist's discography in addition to (not instead of) its primary
+# Release.artist_id credit. Needed because collaborative releases are
+# inconsistently credited upstream (e.g. Sour Soul is credited solely to
+# BADBADNOTGOOD, but should also show up under Ghostface Killah).
+release_collab_association = Table(
+    "release_collab_association",
+    Base.metadata,
+    Column("release_id", ForeignKey("release.id", ondelete="CASCADE"), primary_key=True),
+    Column("artist_id", ForeignKey("artist.id", ondelete="CASCADE"), primary_key=True),
+)
+
 
 class MusicBrainzEntity(Base):
     # Release and ArtistOrLabel are built from this prototype
@@ -259,6 +271,11 @@ class Release(MusicBrainzEntity):
     main_genre = relationship("Genre", back_populates="main_genres")
     genres = relationship(
         "Genre", secondary=release_genre_association, back_populates="releases"
+    )
+    collab_artists = relationship(
+        "Artist",
+        secondary=release_collab_association,
+        back_populates="collab_releases",
     )
     reviews = relationship(
         "Review",
@@ -404,7 +421,11 @@ class Release(MusicBrainzEntity):
     def home_data_light(cls) -> list[Row]:
         """
         Retrieves lightweight (id, listen_date, runtime) rows for every release,
-        ordered by listen date descending.
+        ordered by listen date descending, then id descending.
+
+        listen_date has no time component when set from the "log a listen" form
+        (only edited manually), so most same-day rows tie on listen_date alone;
+        breaking ties by id keeps same-day entries in the order they were logged.
 
         Cheap enough to run on every home page request even for large libraries,
         since it does not touch any relationships. Used to compute day-group
@@ -413,7 +434,7 @@ class Release(MusicBrainzEntity):
         try:
             results = (
                 app_db.session.query(cls.id, cls.listen_date, cls.runtime)
-                .order_by(cls.listen_date.desc())
+                .order_by(cls.listen_date.desc(), cls.id.desc())
                 .all()
             )
         except Exception:
@@ -1373,6 +1394,27 @@ class Artist(ArtistOrLabel):
     genres = relationship(
         "Genre", secondary=artist_genre_association, back_populates="artists"
     )
+    # Releases manually credited to this artist as a collaborator via
+    # release_collab_association, on top of their own `releases`.
+    collab_releases = relationship(
+        "Release",
+        secondary=release_collab_association,
+        back_populates="collab_artists",
+    )
+
+    @property
+    def all_releases(self) -> list[Release]:
+        """
+        This artist's full discography: releases they're the primary credit
+        for, plus releases manually credited to them as a collaborator (see
+        `release_collab_association`), newest listen first (ties broken by
+        id, consistent with Release.home_data_light / build_day_groups).
+
+        Deduped in case a release's own primary artist is also (redundantly)
+        added as one of its collab artists.
+        """
+        combined = dict.fromkeys([*self.releases, *self.collab_releases])
+        return sorted(combined, key=lambda r: (r.listen_date, r.id), reverse=True)
 
 
 class Goal(Base):
