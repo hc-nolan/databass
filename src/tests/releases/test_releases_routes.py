@@ -270,6 +270,31 @@ class TestDelete:
         assert response.status_code == 302
         assert response.location == "/error"
 
+    def test_delete_review_success_redirects_to_referrer(self, client, mocker):
+        """
+        Test that deleting a review redirects back to the referring page instead of home
+        """
+        mocker.patch("databass.db.delete")
+        mocker.patch("databass.db.models.Review.exists_by_id", return_value=mocker.MagicMock())
+        delete_data = {"id": 1, "type": "review"}
+        response = client.post(
+            "/delete", json=delete_data, headers={"Referer": "/release/1"}
+        )
+        assert response.status_code == 302
+        assert response.location == "/release/1"
+
+    def test_delete_fail_non_existing_review(self, client, mocker):
+        """
+        Test for proper handling of a deletion request for a review that does not exist,
+        checked against the correct model rather than always Release
+        """
+        mocker.patch("databass.db.models.Release.exists_by_id", return_value="a")
+        mocker.patch("databass.db.models.Review.exists_by_id", return_value=False)
+        delete_data = {"id": 1, "type": "review"}
+        response = client.post("/delete", json=delete_data)
+        assert response.status_code == 302
+        assert response.location == "/error"
+
 
 class TestAddReview:
     # Tests for /release/<id>/add_review
@@ -324,3 +349,95 @@ class TestAddReview:
         assert response.status_code == 302
         assert response.location == "/error"
         mock_release.assert_called_once()
+
+
+class TestEditReview:
+    # Tests for /release/<id>/edit_review
+    def test_edit_review_success(self, client, mock_release_data, mocker):
+        """
+        Test for successful editing of an existing review's text
+        """
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        mock_review = mocker.MagicMock()
+        mock_review.id = 1
+        mock_review.release_id = 1
+        mocker.patch("databass.db.models.Review.exists_by_id", return_value=mock_review)
+        mock_update = mocker.patch("databass.db.update")
+
+        response = client.post(
+            "/release/1/edit_review",
+            data={"id": 1, "text": "updated review text"},
+            headers={"Referer": "/release/1"},
+        )
+
+        assert response.status_code == 302
+        assert response.location == "/release/1"
+        assert mock_review.text == "updated review text"
+        mock_update.assert_called_once_with(mock_review)
+
+    def test_edit_review_fail_non_existing_release(self, client, mocker):
+        """
+        Test for proper handling of a request to edit a review on a release that does not exist
+        """
+        mocker.patch("databass.db.models.Release.exists_by_id", return_value=False)
+        response = client.post(
+            "/release/1/edit_review",
+            data={"id": 1, "text": "updated review text"},
+            headers={"Referer": "/release/1"},
+        )
+        assert response.status_code == 302
+        assert response.location == "/error"
+
+    def test_edit_review_fail_malformed_request(self, client, mock_release_data, mocker):
+        """
+        Test for proper handling of a request missing the review id or text
+        """
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        response = client.post(
+            "/release/1/edit_review",
+            data={"id": 1},
+            headers={"Referer": "/release/1"},
+        )
+        assert response.status_code == 302
+        assert response.location == "/error"
+
+    def test_edit_review_fail_non_existing_review(self, client, mock_release_data, mocker):
+        """
+        Test for proper handling of a request to edit a review that does not exist
+        """
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        mocker.patch("databass.db.models.Review.exists_by_id", return_value=None)
+        response = client.post(
+            "/release/1/edit_review",
+            data={"id": 99, "text": "updated review text"},
+            headers={"Referer": "/release/1"},
+        )
+        assert response.status_code == 302
+        assert response.location == "/error"
+
+    def test_edit_review_fail_review_belongs_to_different_release(
+        self, client, mock_release_data, mocker
+    ):
+        """
+        Test that a review can't be edited via a mismatched release_id in the URL
+        """
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        mock_review = mocker.MagicMock()
+        mock_review.id = 1
+        mock_review.release_id = 2
+        mocker.patch("databass.db.models.Review.exists_by_id", return_value=mock_review)
+        response = client.post(
+            "/release/1/edit_review",
+            data={"id": 1, "text": "updated review text"},
+            headers={"Referer": "/release/1"},
+        )
+        assert response.status_code == 302
+        assert response.location == "/error"

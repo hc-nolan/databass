@@ -20,6 +20,7 @@ from flask import (
     flash,
     make_response,
     send_file,
+    jsonify,
 )
 from sqlalchemy.exc import IntegrityError
 import pycountry
@@ -73,8 +74,12 @@ def build_entry(release: models.Release) -> dict:
         "id": release.id,
         "title": release.name,
         "year": release.year,
-        "artist": release.artist,
-        "label": release.label,
+        "artist": {"id": release.artist.id, "name": release.artist.name}
+        if release.artist
+        else None,
+        "label": {"id": release.label.id, "name": release.label.name}
+        if release.label
+        else None,
         "main_genre": release.main_genre.name if release.main_genre else None,
         "subgenres": subgenres,
         "note": latest_review.text if latest_review else None,
@@ -555,6 +560,310 @@ def register_routes(app):
         resp = make_response(send_file(img_path))
         resp.headers["Cache-Control"] = "max-age=600"
         return resp
+
+    # ---------------------------------------------------------------
+    # JSON API for the SvelteKit frontend. Mirrors the routes above;
+    # once the frontend migration is complete, the render_template
+    # routes above (and their fragment/htmx-style endpoints) will be
+    # removed in favour of these.
+    # ---------------------------------------------------------------
+
+    @app.route("/api/home", methods=["GET"])
+    def api_home():
+        active_goals = models.Goal.get_incomplete()
+        goal = None
+        if active_goals:
+            goal = process_goal_data(active_goals[0])
+            current_pace = models.Release.added_per_day_this_year()
+            goal["on_track"] = current_pace >= goal["target"]
+            goal["start"] = goal["start"].isoformat()
+            goal["end_year"] = goal["end"].year
+            goal["end"] = goal["end"].isoformat()
+
+        this_year = {
+            "count": models.Release.added_this_year(),
+            "new_artists": models.Artist.added_this_year(),
+            "new_labels": models.Label.added_this_year(),
+            "listening_time": models.Release.runtime_this_year(),
+            "average_score": round(models.Release.average_rating_this_year() / 10, 1),
+            "pace": models.Release.added_per_day_this_year(),
+        }
+
+        distribution = models.Release.rating_distribution()
+        max_bucket = max(distribution["buckets"]) or 1
+        score_spread = [
+            {
+                "pct": round((count / max_bucket) * 100),
+                "is_peak": count == max_bucket and count > 0,
+            }
+            for count in distribution["buckets"]
+        ]
+
+        on_repeat = models.Artist.on_repeat(days=90, limit=3)
+        for entity in on_repeat:
+            entity["has_art"] = image_exists("artist", entity["id"])
+            entity["art_key"] = initials(entity["name"])
+
+        return jsonify(
+            {
+                "this_year": this_year,
+                "goal": goal,
+                "score_spread": score_spread,
+                "median_score": distribution["median"],
+                "on_repeat": on_repeat,
+                "total_logged": flask.g.total_logged,
+                "day_of_year": flask.g.day_of_year,
+                "current_year": flask.g.current_year,
+            }
+        )
+
+    @app.route("/api/home/entries", methods=["GET"])
+    def api_home_entries():
+        rows = models.Release.home_data_light()
+        groups = build_day_groups(rows)
+
+        page = Pager.get_page_param(request)
+        paged_groups, flask_pagination = Pager.paginate(
+            per_page=4, current_page=page, data=groups
+        )
+
+        page_ids = [id_ for group in paged_groups for id_ in group["ids"]]
+        releases_by_id = {r.id: r for r in models.Release.by_ids(page_ids)}
+        for group in paged_groups:
+            group["items"] = [
+                build_entry(releases_by_id[id_])
+                for id_ in group["ids"]
+                if id_ in releases_by_id
+            ]
+            del group["ids"]
+
+        return jsonify(
+            {
+                "groups": paged_groups,
+                "has_next": flask_pagination.has_next,
+                "page": page,
+            }
+        )
+
+    @app.route("/api/new", methods=["GET"])
+    def api_new():
+        all_genres = sorted(models.Genre.get_distinct_column_values("name"))
+        goal_nudge = None
+        active_goals = models.Goal.get_incomplete()
+        if active_goals:
+            g_data = process_goal_data(active_goals[0])
+            remaining = max(g_data["amount"] - g_data["current"], 0)
+            goal_nudge = (
+                f"{remaining} to go on your {g_data['end'].year} {g_data['type']} goal"
+            )
+        return jsonify(
+            {
+                "all_genres": all_genres,
+                "goal_nudge": goal_nudge,
+                "today": Util.today(),
+                "total_logged": flask.g.total_logged,
+            }
+        )
+
+    @app.route("/api/search", methods=["POST"])
+    def api_search():
+        data = request.get_json() or {}
+        search_release = data.get("release")
+        search_artist = data.get("artist")
+        search_label = data.get("label")
+
+        if search_release is None and search_artist is None and search_label is None:
+            return jsonify({"error": "Search requires at least one search term"}), 400
+
+        release_data = MusicBrainz.release_search(
+            release=search_release, artist=search_artist, label=search_label
+        )
+        results = []
+        for item in release_data:
+            mbid = item["release"].get("mbid")
+            logged = bool(mbid and models.Release.exists_by_mbid(mbid))
+            artist_name = item["artist"].get("name") or item["release"].get("name") or ""
+            results.append({**item, "logged": logged, "initials": initials(artist_name)})
+
+        return jsonify({"results": results})
+
+    @app.route("/api/submit", methods=["POST"])
+    def api_submit():
+        data = request.get_json() or {}
+        release_data = {}
+        if data.get("manual_submit"):
+            release_data = get_manual_release_data(data)
+        else:
+            release_data = get_release_data(data)
+
+        try:
+            handle_submit_data(release_data)
+        except IntegrityError as err:
+            return jsonify({"error": str(err)}), 400
+
+        return jsonify({"ok": True}), 201
+
+    @app.route("/api/browse/<string:tab>", methods=["GET"])
+    def api_browse(tab):
+        if tab not in ("releases", "artists", "labels"):
+            abort(404)
+        counts = {
+            "releases": models.Release.total_count(),
+            "artists": models.Artist.total_count(),
+            "labels": models.Label.total_count(),
+        }
+        return jsonify({"counts": counts, "filters": browse_filter_options(tab)})
+
+    @app.route("/api/browse/<string:tab>/results", methods=["GET"])
+    def api_browse_results(tab):
+        if tab not in ("releases", "artists", "labels"):
+            abort(404)
+        q = request.args.get("q", "").strip()
+        country = request.args.get("country", "")
+        rating_min = request.args.get("rating_min", type=int)
+        page = max(request.args.get("page", 1, type=int), 1)
+        per_page = 30
+
+        if tab == "releases":
+            sort = request.args.get("sort", "listened")
+            genre = request.args.get("genre", "")
+            year_min = request.args.get("year_min", type=int)
+            rows, total = models.Release.browse_search(
+                q=q,
+                country=country,
+                genre=genre,
+                year_min=year_min,
+                rating_min=rating_min * 10 if rating_min else None,
+                sort=sort,
+                page=page,
+                per_page=per_page,
+            )
+            items = [build_browse_release_item(r) for r in rows]
+        else:
+            model = models.Artist if tab == "artists" else models.Label
+            sort = request.args.get("sort", "releases")
+            type_ = request.args.get("type", "")
+            releases_min = request.args.get("releases_min", type=int)
+            rows, total = model.browse_search(
+                q=q,
+                country=country,
+                type_=type_,
+                releases_min=releases_min,
+                rating_min=rating_min * 10 if rating_min else None,
+                sort=sort,
+                page=page,
+                per_page=per_page,
+            )
+            items = [build_browse_entity_item(r, tab[:-1]) for r in rows]
+
+        total_pages = max(-(-total // per_page), 1)
+        return jsonify(
+            {
+                "items": items,
+                "total": total,
+                "page": page,
+                "total_pages": total_pages,
+            }
+        )
+
+    @app.route("/api/stats", methods=["GET"])
+    def api_stats():
+        periods = stats2.available_periods()
+        period = request.args.get("period") or (periods[0]["key"] if periods else "all")
+        first_listen = models.Release.first_listen_date()
+        return jsonify(
+            {
+                "periods": periods,
+                "active_period": period,
+                "stats": stats2.get_period_stats(period),
+                "genres": stats2.get_genre_shares(),
+                "since": first_listen.isoformat() if first_listen else None,
+            }
+        )
+
+    @app.route("/api/stats/period/<string:period>", methods=["GET"])
+    def api_stats_period(period):
+        return jsonify({"stats": stats2.get_period_stats(period)})
+
+    @app.route("/api/stats/leaderboards/<string:stats_type>", methods=["GET"])
+    def api_stats_leaderboards(stats_type):
+        entity = models.Label if stats_type == "labels" else models.Artist
+        return jsonify({"boards": stats2.build_leaderboards(entity)})
+
+    @app.route("/api/goals", methods=["GET"])
+    def api_goals():
+        incomplete_goals = models.Goal.get_incomplete() or []
+        current_incomplete_goals = [
+            g for g in incomplete_goals if g.end >= datetime.now()
+        ]
+        active_goal = (
+            build_active_goal_view(current_incomplete_goals[0])
+            if current_incomplete_goals
+            else None
+        )
+        past_goals = [build_past_goal_view(g) for g in models.Goal.get_past()]
+
+        today_date = datetime.now().date()
+        next_new_year = date(today_date.year + 1, 1, 1)
+        goal_presets = [
+            {
+                "label": "365 in a year",
+                "amount": 365,
+                "end": (today_date + timedelta(days=365)).isoformat(),
+            },
+            {
+                "label": "100 by new year",
+                "amount": 100,
+                "end": next_new_year.isoformat(),
+            },
+            {
+                "label": "1000 in a year",
+                "amount": 1000,
+                "end": (today_date + timedelta(days=365)).isoformat(),
+            },
+        ]
+        goal_types = [
+            {"value": "release", "label": "releases"},
+            {"value": "artist", "label": "artists"},
+            {"value": "label", "label": "labels"},
+        ]
+
+        return jsonify(
+            {
+                "active_goal": active_goal,
+                "past_goals": past_goals,
+                "current_pace": models.Release.added_per_day_this_year(),
+                "today": Util.today(),
+                "default_amount": 100,
+                "default_end": (today_date + timedelta(days=90)).isoformat(),
+                "goal_presets": goal_presets,
+                "goal_types": goal_types,
+            }
+        )
+
+    @app.route("/api/goals", methods=["POST"])
+    def api_add_goal():
+        data = request.get_json() or {}
+        if not data:
+            return jsonify({"error": "/api/goals received an empty payload"}), 400
+        try:
+            goal = db.construct_item(model_name="goal", data_dict=data)
+            if not goal:
+                raise NameError("Construction of Goal object failed")
+        except Exception as e:
+            return jsonify({"error": str(e)}), 400
+
+        db.insert(goal)
+        return jsonify({"ok": True}), 201
+
+    @app.route("/api/<string:item_type>/<int:item_id>", methods=["DELETE"])
+    def api_delete(item_type, item_id):
+        if item_type not in ("release", "artist", "label", "review"):
+            abort(404)
+        if not db.get_model(item_type).exists_by_id(item_id):
+            return jsonify({"error": f"No {item_type} with id {item_id} found."}), 404
+        db.delete(item_type=item_type, item_id=item_id)
+        return jsonify({"ok": True})
 
     @app.template_filter("country_name")
     def country_name_filter(code: Optional[str]) -> Optional[str]:

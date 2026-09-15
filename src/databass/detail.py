@@ -108,7 +108,10 @@ def build_release_detail(release: models.Release) -> dict:
         {"label": "TRACKS", "value": release.track_count, "tone": "ink"},
     ]
 
-    entries = [{"date": r.timestamp.strftime("%Y-%m-%d"), "text": r.text} for r in reviews]
+    entries = [
+        {"id": r.id, "date": r.timestamp.strftime("%Y-%m-%d"), "text": r.text}
+        for r in reviews
+    ]
     if reviews:
         earliest = reviews[-1].timestamp.strftime("%Y-%m-%d")
         noun = "entry" if len(reviews) == 1 else "entries"

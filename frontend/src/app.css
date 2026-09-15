@@ -1,0 +1,101 @@
+@import 'tailwindcss';
+@import '@fontsource/public-sans/400.css';
+@import '@fontsource/public-sans/500.css';
+@import '@fontsource/public-sans/600.css';
+@import '@fontsource/public-sans/700.css';
+@import '@fontsource/public-sans/800.css';
+@import '@fontsource/public-sans/400-italic.css';
+
+/* databass v0.7 — dark, dense, terminal-adjacent.
+   Source: design_handoff_databass_v07/README.md "Design tokens". */
+
+@theme {
+	--font-sans: 'Public Sans', Helvetica, Arial, sans-serif;
+
+	/* surfaces */
+	--color-bg: oklch(0.16 0.008 70);
+	--color-panel: oklch(0.19 0.009 70);
+	--color-panel-alt: oklch(0.185 0.009 70);
+	--color-field: oklch(0.16 0.008 70);
+	--color-hover: oklch(0.19 0.009 70);
+	--color-line: oklch(0.26 0.01 70);
+	--color-border: oklch(0.28 0.01 70);
+	--color-border-strong: oklch(0.32 0.01 70);
+	--color-border-hover: oklch(0.45 0.012 80);
+
+	/* ink */
+	--color-ink: oklch(0.93 0.012 80);
+	--color-ink-2: oklch(0.88 0.012 80);
+	--color-ink-3: oklch(0.8 0.012 80);
+	--color-muted: oklch(0.7 0.012 80);
+	--color-muted-2: oklch(0.66 0.012 80);
+
+	/* bars / tracks */
+	--color-track: oklch(0.26 0.01 70);
+	--color-bar-dim: oklch(0.44 0.014 70);
+
+	/* amber — primary accent */
+	--color-amber: oklch(0.74 0.13 62);
+	--color-amber-hover: oklch(0.8 0.13 62);
+	--color-on-amber: oklch(0.2 0.03 62);
+	--color-amber-soft-bg: oklch(0.3 0.05 62);
+	--color-amber-soft-fg: oklch(0.88 0.07 62);
+	--color-amber-soft-border: oklch(0.5 0.08 62);
+
+	/* cyan — secondary accent */
+	--color-cyan: oklch(0.72 0.13 200);
+	--color-cyan-soft-bg: oklch(0.3 0.05 200);
+	--color-cyan-soft-fg: oklch(0.84 0.09 200);
+
+	/* red — shortfall / missed */
+	--color-red: oklch(0.7 0.13 30);
+	--color-red-soft-bg: oklch(0.32 0.06 30);
+	--color-red-soft-fg: oklch(0.86 0.09 30);
+	--color-danger-text: oklch(0.72 0.08 30);
+
+	/* type scale (roles, not a generic scale — see README typography table) */
+	--text-2xs: 10px;
+	--text-xs: 10.5px;
+	--text-sm: 11.5px;
+	--text-base: 13.5px;
+	--text-md: 14.5px;
+	--text-lg: 15px;
+	--text-xl: 19px;
+	--text-2xl: 26px;
+	--text-3xl: 34px;
+	--text-4xl: 40px;
+
+	--tracking-tightest: -0.045em;
+	--tracking-tighter: -0.035em;
+	--tracking-tight: -0.02em;
+	--tracking-wide: 0.03em;
+	--tracking-wider: 0.08em;
+	--tracking-widest: 0.16em;
+
+	/* radii */
+	--radius-xs: 4px;
+	--radius-sm: 6px;
+	--radius-md: 7px;
+	--radius-lg: 10px;
+	--radius-xl: 12px;
+	--radius-2xl: 14px;
+}
+
+@layer base {
+	body {
+		background: var(--color-bg);
+		color: var(--color-ink);
+		font-family: var(--font-sans);
+		font-size: var(--text-base);
+		line-height: 1.5;
+		font-variant-numeric: tabular-nums;
+		-webkit-font-smoothing: antialiased;
+	}
+
+	a {
+		color: var(--color-ink);
+	}
+	a:hover {
+		color: var(--color-amber);
+	}
+}

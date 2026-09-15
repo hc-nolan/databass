@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:oklch(0.16 0.008 70); }
+  a { color:oklch(0.93 0.012 80); text-decoration:none; }
+  a:hover { color:oklch(0.74 0.13 62); }
+  .cover { background-color:oklch(0.28 0.01 70); background-image:repeating-linear-gradient(135deg, oklch(0.32 0.012 70) 0 2px, transparent 2px 7px); }
+  input::placeholder, textarea::placeholder { color:oklch(0.45 0.012 80); }
+</style>
+</helmet>
+<div style="min-height:100vh;background:oklch(0.16 0.008 70);color:oklch(0.93 0.012 80);font-family:'Public Sans',Helvetica,Arial,sans-serif;font-size:13.5px;line-height:1.5;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased">
+
+  <header style="display:flex;flex-wrap:wrap;align-items:baseline;gap:20px 28px;padding:22px 28px;border-bottom:1px solid oklch(0.26 0.01 70)">
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <span style="font-weight:800;font-size:23px;letter-spacing:-0.04em">databass</span>
+      <span style="font-size:10px;letter-spacing:0.12em;color:oklch(0.7 0.012 80)">v0.7</span>
+    </div>
+    <nav style="display:flex;flex-wrap:wrap;gap:2px;margin-right:auto">
+      <a href="Databass Home.dc.html" style="padding:5px 11px;border-radius:999px;font-size:12px;color:oklch(0.62 0.012 80)">home</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;background:oklch(0.24 0.012 70);font-size:12px">new</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;font-size:12px;color:oklch(0.62 0.012 80)">releases</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;font-size:12px;color:oklch(0.62 0.012 80)">artists</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;font-size:12px;color:oklch(0.62 0.012 80)">labels</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;font-size:12px;color:oklch(0.62 0.012 80)">stats</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;font-size:12px;color:oklch(0.62 0.012 80)">goals</a>
+    </nav>
+    <span style="font-size:11px;color:oklch(0.66 0.012 80)">{{ headerCount }}</span>
+  </header>
+
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:28px;padding:28px;max-width:1440px;margin:0 auto">
+
+    <main style="flex:1 1 560px;min-width:0;display:flex;flex-direction:column;gap:20px">
+
+      <section style="display:flex;flex-direction:column;gap:12px;padding:18px;border:1px solid oklch(0.28 0.01 70);border-radius:12px;background:oklch(0.19 0.009 70)">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:12px">
+          <span style="font-size:11px;font-weight:700;letter-spacing:0.16em;color:oklch(0.74 0.13 62)">SEARCH MUSICBRAINZ</span>
+          <button style="padding:4px 10px;border:1px solid oklch(0.32 0.01 70);border-radius:6px;background:transparent;color:oklch(0.62 0.012 80);font-family:inherit;font-size:11px;cursor:pointer" style-hover="color:oklch(0.93 0.012 80);border-color:oklch(0.45 0.012 80)">manual entry</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <input value="{{ qRelease }}" onChange="{{ onQRelease }}" placeholder="release" style="flex:2 1 200px;min-width:0;padding:10px 12px;border:1px solid oklch(0.34 0.01 70);border-radius:8px;background:oklch(0.16 0.008 70);color:oklch(0.93 0.012 80);font-family:inherit;font-size:13.5px;outline:none" style-focus="border-color:oklch(0.74 0.13 62)" />
+          <input placeholder="artist" style="flex:1 1 150px;min-width:0;padding:10px 12px;border:1px solid oklch(0.3 0.01 70);border-radius:8px;background:oklch(0.16 0.008 70);color:oklch(0.93 0.012 80);font-family:inherit;font-size:13.5px;outline:none" style-focus="border-color:oklch(0.74 0.13 62)" />
+          <input placeholder="label" style="flex:1 1 150px;min-width:0;padding:10px 12px;border:1px solid oklch(0.3 0.01 70);border-radius:8px;background:oklch(0.16 0.008 70);color:oklch(0.93 0.012 80);font-family:inherit;font-size:13.5px;outline:none" style-focus="border-color:oklch(0.74 0.13 62)" />
+          <button style="padding:10px 20px;border:0;border-radius:8px;background:oklch(0.74 0.13 62);color:oklch(0.2 0.03 62);font-family:inherit;font-size:12.5px;font-weight:700;letter-spacing:0.04em;cursor:pointer" style-hover="background:oklch(0.8 0.13 62)">SEARCH</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:11px;color:oklch(0.65 0.012 80)">
+          <span>{{ resultMeta }}</span>
+          <span style="color:oklch(0.34 0.01 70)">·</span>
+          <span>duplicates of releases you already logged are marked</span>
+        </div>
+      </section>
+
+      <div style="display:flex;flex-direction:column;gap:6px">
+        <sc-for list="{{ results }}" as="r" hint-placeholder-count="6">
+          <article onClick="{{ r.select }}" style="display:grid;grid-template-columns:52px minmax(0,1fr) auto;align-items:center;gap:16px;padding:12px;border:1px solid {{ r.borderColor }};background:{{ r.bg }};border-radius:10px;cursor:pointer" style-hover="border-color:oklch(0.45 0.012 80)">
+            <div class="cover" style="width:52px;height:52px;border-radius:4px;display:flex;align-items:center;justify-content:center">
+              <span style="font-size:9px;font-weight:700;letter-spacing:0.1em;color:oklch(0.6 0.012 80)">{{ r.initials }}</span>
+            </div>
+            <div style="min-width:0;display:flex;flex-direction:column;gap:4px">
+              <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:8px">
+                <span style="font-size:14.5px;font-weight:500">{{ r.title }}</span>
+                <sc-if value="{{ r.logged }}" hint-placeholder-val="{{ false }}">
+                  <span style="padding:1px 7px;border-radius:999px;background:oklch(0.3 0.02 200);color:oklch(0.78 0.1 200);font-size:9.5px;font-weight:700;letter-spacing:0.08em">ALREADY LOGGED</span>
+                </sc-if>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:12px;color:oklch(0.62 0.012 80)">
+                <span>{{ r.artist }}</span>
+                <span style="color:oklch(0.36 0.01 70)">/</span>
+                <span>{{ r.label }}</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;justify-content:flex-end;gap:14px;font-size:11.5px;color:oklch(0.68 0.012 80)">
+              <span>{{ r.year }}</span>
+              <span>{{ r.tracks }} tr</span>
+              <span>{{ r.country }}</span>
+              <span style="min-width:78px;text-align:right;color:oklch(0.68 0.012 80)">{{ r.format }}</span>
+            </div>
+          </article>
+        </sc-for>
+      </div>
+    </main>
+
+    <aside style="flex:1 1 340px;min-width:300px;position:sticky;top:28px;display:flex;flex-direction:column;gap:16px;padding:22px;border:1px solid oklch(0.3 0.01 70);border-radius:12px;background:oklch(0.19 0.009 70)">
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+        <span style="font-size:11px;font-weight:700;letter-spacing:0.16em;color:oklch(0.74 0.13 62)">LOG THIS LISTEN</span>
+        <span style="font-size:10.5px;color:oklch(0.65 0.012 80)">⏎ to save</span>
+      </div>
+
+      <sc-if value="{{ noSelection }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:28px 16px;border:1px dashed oklch(0.32 0.01 70);border-radius:10px;text-align:center;color:oklch(0.65 0.012 80);font-size:12.5px;line-height:1.6">Pick a result to fill this in.<br />Everything below stays editable.</div>
+      </sc-if>
+
+      <sc-if value="{{ hasSelection }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:18px">
+          <div style="display:flex;gap:14px;align-items:center">
+            <div class="cover" style="width:64px;height:64px;border-radius:5px;flex:0 0 auto"></div>
+            <div style="min-width:0;display:flex;flex-direction:column;gap:3px">
+              <span style="font-size:15px;font-weight:600">{{ sel.title }}</span>
+              <span style="font-size:12px;color:oklch(0.62 0.012 80)">{{ sel.artist }}</span>
+              <span style="font-size:11px;color:oklch(0.65 0.012 80)">{{ sel.subline }}</span>
+            </div>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;align-items:baseline;justify-content:space-between">
+              <span style="font-size:10.5px;letter-spacing:0.14em;color:oklch(0.68 0.012 80)">RATING</span>
+              <span style="font-size:12px;color:oklch(0.7 0.012 80)">{{ ratingLabel }}</span>
+            </div>
+            <div style="display:flex;gap:4px">
+              <sc-for list="{{ segments }}" as="seg" hint-placeholder-count="10">
+                <button onClick="{{ seg.set }}" title="{{ seg.n }}" style="flex:1;height:30px;border:1px solid oklch(0.32 0.01 70);border-radius:4px;background:{{ seg.bg }};color:{{ seg.fg }};font-family:inherit;font-size:10.5px;cursor:pointer;padding:0">{{ seg.n }}</button>
+              </sc-for>
+            </div>
+            <span style="font-size:10.5px;color:oklch(0.64 0.012 80)">{{ ratingHint }}</span>
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <label style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:10.5px;letter-spacing:0.14em;color:oklch(0.68 0.012 80)">LISTENED</span>
+              <input value="{{ listenDate }}" onChange="{{ onDate }}" style="padding:9px 10px;border:1px solid oklch(0.32 0.01 70);border-radius:7px;background:oklch(0.16 0.008 70);color:oklch(0.93 0.012 80);font-family:inherit;font-size:12.5px;outline:none" style-focus="border-color:oklch(0.74 0.13 62)" />
+            </label>
+            <label style="display:flex;flex-direction:column;gap:6px">
+              <span style="font-size:10.5px;letter-spacing:0.14em;color:oklch(0.68 0.012 80)">TRACKS</span>
+              <input value="{{ sel.tracks }}" readonly="readonly" style="padding:9px 10px;border:1px solid oklch(0.28 0.01 70);border-radius:7px;background:oklch(0.17 0.008 70);color:oklch(0.68 0.012 80);font-family:inherit;font-size:12.5px;outline:none" />
+            </label>
+          </div>
+
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <span style="font-size:10.5px;letter-spacing:0.14em;color:oklch(0.68 0.012 80)">GENRE</span>
+            <div style="display:flex;flex-wrap:wrap;gap:6px">
+              <sc-for list="{{ genreChips }}" as="g" hint-placeholder-count="4">
+                <button onClick="{{ g.toggle }}" style="padding:5px 11px;border:1px solid {{ g.border }};border-radius:999px;background:{{ g.bg }};color:{{ g.fg }};font-family:inherit;font-size:11px;cursor:pointer">{{ g.name }}</button>
+              </sc-for>
+            </div>
+            <input placeholder="+ add subgenre" style="padding:9px 10px;border:1px solid oklch(0.3 0.01 70);border-radius:7px;background:oklch(0.16 0.008 70);color:oklch(0.93 0.012 80);font-family:inherit;font-size:12.5px;outline:none" style-focus="border-color:oklch(0.74 0.13 62)" />
+          </div>
+
+          <label style="display:flex;flex-direction:column;gap:6px">
+            <span style="font-size:10.5px;letter-spacing:0.14em;color:oklch(0.68 0.012 80)">NOTE — OPTIONAL</span>
+            <textarea rows="3" placeholder="what did it feel like?" style="padding:10px;border:1px solid oklch(0.3 0.01 70);border-radius:7px;background:oklch(0.16 0.008 70);color:oklch(0.93 0.012 80);font-family:inherit;font-style:italic;font-size:13px;line-height:1.5;resize:vertical;outline:none" style-focus="border-color:oklch(0.74 0.13 62)"></textarea>
+          </label>
+
+          <div style="display:flex;gap:10px;align-items:center">
+            <button onClick="{{ save }}" style="flex:1;padding:11px 16px;border:0;border-radius:8px;background:oklch(0.74 0.13 62);color:oklch(0.2 0.03 62);font-family:inherit;font-size:12.5px;font-weight:700;letter-spacing:0.04em;cursor:pointer" style-hover="background:oklch(0.8 0.13 62)">{{ saveLabel }}</button>
+            <button onClick="{{ clear }}" style="padding:11px 14px;border:1px solid oklch(0.32 0.01 70);border-radius:8px;background:transparent;color:oklch(0.62 0.012 80);font-family:inherit;font-size:12.5px;cursor:pointer" style-hover="color:oklch(0.93 0.012 80)">clear</button>
+          </div>
+          <span style="font-size:10.5px;color:oklch(0.64 0.012 80);text-align:center">{{ goalNudge }}</span>
+        </div>
+      </sc-if>
+    </aside>
+  </div>
+
+  <div style="position:fixed;left:14px;bottom:12px;pointer-events:none;padding:3px 9px;border:1px solid oklch(0.3 0.01 70);border-radius:5px;background:oklch(0.19 0.009 70);font-size:10.5px;letter-spacing:0.08em;color:oklch(0.6 0.012 80)">{{ mode }}</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440},&quot;ratingScale&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;0–10&quot;,&quot;percent&quot;],&quot;default&quot;:&quot;0–10&quot;,&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { selected: 0, rating: 7, date: "2026-09-12", genres: ["power pop"], saved: false, q: "guitar romantic" };
+
+  results() {
+    return [
+      { title: "Guitar Romantic", artist: "The Exploding Hearts", label: "Dirtnap Records", year: 2003, tracks: 10, country: "US", format: "CD", logged: false },
+      { title: "Guitar Romantic", artist: "The Exploding Hearts", label: "Dirtnap Records", year: 2003, tracks: 10, country: "US", format: "Vinyl", logged: false },
+      { title: "Guitar Romantic (Remastered)", artist: "The Exploding Hearts", label: "Third Man Records", year: 2023, tracks: 14, country: "US", format: "Vinyl", logged: true },
+      { title: "Guitar Romantic", artist: "The Exploding Hearts", label: "Screaming Apple", year: 2004, tracks: 10, country: "DE", format: "Vinyl", logged: false },
+      { title: "Shattered", artist: "The Exploding Hearts", label: "Dirtnap Records", year: 2006, tracks: 14, country: "US", format: "CD", logged: false },
+      { title: "Guitar Romantic", artist: "The Exploding Hearts", label: "[no label]", year: 2003, tracks: 10, country: "XW", format: "Digital Media", logged: false },
+    ];
+  }
+
+  initials(name) {
+    return name.split(/\s+/).map(w => w[0]).join("").slice(0, 4).toUpperCase();
+  }
+
+  renderVals() {
+    const rows = this.results();
+    const sel = rows[this.state.selected];
+    const r = this.state.rating;
+    const words = ["","actively bad","didn't work","flat","thin","fine","solid","really good","excellent","near-perfect","all-timer"];
+
+    return {
+      headerCount: "2,171 logged · 312 this year",
+      qRelease: this.state.q,
+      onQRelease: e => this.setState({ q: e.target.value }),
+      resultMeta: rows.length + " results for “" + this.state.q + "”",
+      results: rows.map((row, i) => ({
+        ...row,
+        initials: this.initials(row.artist),
+        bg: i === this.state.selected ? "oklch(0.22 0.012 70)" : "oklch(0.185 0.009 70)",
+        borderColor: i === this.state.selected ? "oklch(0.74 0.13 62)" : "oklch(0.26 0.01 70)",
+        select: () => this.setState({ selected: i, saved: false }),
+      })),
+      noSelection: sel == null,
+      hasSelection: sel != null,
+      sel: sel ? { ...sel, subline: sel.label + " · " + sel.year + " · " + sel.format + " · " + sel.country } : {},
+      segments: Array.from({ length: 10 }, (_, i) => {
+        const n = i + 1;
+        const on = n <= r;
+        return {
+          n,
+          bg: on ? "oklch(0.74 0.13 62)" : "oklch(0.21 0.01 70)",
+          fg: on ? "oklch(0.2 0.03 62)" : "oklch(0.65 0.012 80)",
+          set: () => this.setState({ rating: n, saved: false }),
+        };
+      }),
+      ratingLabel: (this.props.ratingScale ?? "0–10") === "percent" ? r * 10 + "%" : r + ".0 / 10",
+      ratingHint: words[r] + " · stored as " + r * 10 + "%",
+      listenDate: this.state.date,
+      onDate: e => this.setState({ date: e.target.value }),
+      genreChips: ["punk rock", "power pop", "indie rock", "garage rock"].map(name => {
+        const on = this.state.genres.includes(name);
+        return {
+          name,
+          bg: on ? "oklch(0.3 0.05 62)" : "transparent",
+          fg: on ? "oklch(0.86 0.08 62)" : "oklch(0.6 0.012 80)",
+          border: on ? "oklch(0.5 0.08 62)" : "oklch(0.32 0.01 70)",
+          toggle: () => this.setState(s => ({
+            genres: s.genres.includes(name) ? s.genres.filter(g => g !== name) : [...s.genres, name],
+          })),
+        };
+      }),
+      saveLabel: this.state.saved ? "SAVED ✓" : "SAVE LISTEN",
+      save: () => this.setState({ saved: true }),
+      clear: () => this.setState({ rating: 7, genres: [], saved: false }),
+      goalNudge: "189 to go on your 2026 goal",
+      mode: this.state.saved ? "saved" : "insert",
+    };
+  }
+}
+</script>
+</body>
+</html>

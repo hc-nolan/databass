@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:oklch(0.16 0.008 70); }
+  a { color:oklch(0.93 0.012 80); text-decoration:none; }
+  a:hover { color:oklch(0.74 0.13 62); }
+  input::placeholder { color:oklch(0.5 0.012 80); }
+</style>
+</helmet>
+<div style="min-height:100vh;background:oklch(0.16 0.008 70);color:oklch(0.93 0.012 80);font-family:'Public Sans',Helvetica,Arial,sans-serif;font-size:13.5px;line-height:1.5;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased">
+
+  <header style="display:flex;flex-wrap:wrap;align-items:baseline;gap:20px 28px;padding:22px 28px;border-bottom:1px solid oklch(0.26 0.01 70)">
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <span style="font-weight:800;font-size:23px;letter-spacing:-0.04em">databass</span>
+      <span style="font-size:10px;letter-spacing:0.12em;color:oklch(0.7 0.012 80)">v0.7</span>
+    </div>
+    <nav style="display:flex;flex-wrap:wrap;gap:2px;margin-right:auto">
+      <a href="Databass Home.dc.html" style="padding:5px 11px;border-radius:999px;font-size:12px;color:oklch(0.7 0.012 80)">home</a>
+      <a href="Databass New Listen.dc.html" style="padding:5px 11px;border-radius:999px;font-size:12px;color:oklch(0.7 0.012 80)">new</a>
+      <a href="Databass Browse.dc.html" style="padding:5px 11px;border-radius:999px;font-size:12px;color:oklch(0.7 0.012 80)">browse</a>
+      <a href="Databass Stats.dc.html" style="padding:5px 11px;border-radius:999px;font-size:12px;color:oklch(0.7 0.012 80)">stats</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;background:oklch(0.24 0.012 70);font-size:12px">goals</a>
+    </nav>
+    <span style="font-size:11px;color:oklch(0.66 0.012 80)">12 Sep 2026 · day 255</span>
+  </header>
+
+  <div style="max-width:1100px;margin:0 auto;padding:24px 28px 84px;display:flex;flex-direction:column;gap:26px">
+
+    <section style="display:flex;flex-direction:column;gap:20px;padding:26px;border:1px solid oklch(0.32 0.01 70);border-radius:14px;background:oklch(0.19 0.009 70)">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px">
+        <span style="font-size:11px;font-weight:700;letter-spacing:0.16em;color:oklch(0.74 0.13 62)">ACTIVE GOAL</span>
+        <span style="padding:2px 9px;border-radius:999px;background:{{ statusBg }};color:{{ statusFg }};font-size:10.5px;font-weight:700;letter-spacing:0.08em">{{ status }}</span>
+        <span style="margin-left:auto;font-size:11.5px;color:oklch(0.7 0.012 80)">{{ window }}</span>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:10px">
+        <span style="font-size:40px;font-weight:600;letter-spacing:-0.045em;line-height:1">{{ actual }}</span>
+        <span style="font-size:18px;color:oklch(0.74 0.012 80)">/ {{ target }} releases</span>
+        <span style="font-size:13px;color:oklch(0.7 0.012 80)">{{ percentLine }}</span>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="position:relative;height:16px;border-radius:8px;background:oklch(0.25 0.01 70);overflow:hidden">
+          <div style="position:absolute;left:0;top:0;bottom:0;border-radius:8px;background:oklch(0.74 0.13 62);width:{{ progressW }}%"></div>
+          <div style="position:absolute;top:0;bottom:0;width:2px;background:oklch(0.95 0.01 80);left:{{ paceW }}%"></div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;justify-content:space-between;gap:10px;font-size:11.5px;color:oklch(0.7 0.012 80)">
+          <span>{{ progressLabel }}</span>
+          <span>{{ paceLabel }}</span>
+        </div>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:1px;background:oklch(0.28 0.01 70);border:1px solid oklch(0.28 0.01 70);border-radius:10px;overflow:hidden">
+        <sc-for list="{{ metrics }}" as="m" hint-placeholder-count="5">
+          <div style="flex:1 1 140px;display:flex;flex-direction:column;gap:4px;padding:14px;background:oklch(0.185 0.009 70)">
+            <span style="font-size:10.5px;letter-spacing:0.12em;color:oklch(0.68 0.012 80)">{{ m.label }}</span>
+            <span style="font-size:19px;font-weight:600;letter-spacing:-0.02em;color:{{ m.color }}">{{ m.value }}</span>
+            <span style="font-size:11px;color:oklch(0.7 0.012 80)">{{ m.sub }}</span>
+          </div>
+        </sc-for>
+      </div>
+
+      <p style="margin:0;font-size:13.5px;line-height:1.55;color:oklch(0.88 0.012 80);text-wrap:pretty">{{ projection }}</p>
+    </section>
+
+    <section style="display:flex;flex-direction:column;gap:16px;padding:22px;border:1px solid oklch(0.28 0.01 70);border-radius:12px;background:oklch(0.19 0.009 70)">
+      <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px">
+        <span style="font-size:11px;font-weight:700;letter-spacing:0.16em;color:oklch(0.74 0.13 62)">SET A NEW GOAL</span>
+        <span style="font-size:11.5px;color:oklch(0.7 0.012 80)">the numbers update as you type</span>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+        <label style="flex:1 1 110px;display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:10.5px;letter-spacing:0.12em;color:oklch(0.68 0.012 80)">AMOUNT</span>
+          <input value="{{ formAmount }}" onChange="{{ onAmount }}" style="padding:10px 12px;border:1px solid oklch(0.32 0.01 70);border-radius:8px;background:oklch(0.16 0.008 70);color:oklch(0.93 0.012 80);font-family:inherit;font-size:13.5px;outline:none" style-focus="border-color:oklch(0.74 0.13 62)" />
+        </label>
+        <label style="flex:1 1 130px;display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:10.5px;letter-spacing:0.12em;color:oklch(0.68 0.012 80)">OF</span>
+          <div style="display:flex;gap:4px;padding:3px;border:1px solid oklch(0.3 0.01 70);border-radius:8px">
+            <sc-for list="{{ types }}" as="t" hint-placeholder-count="3">
+              <button onClick="{{ t.go }}" style="flex:1;padding:7px 10px;border:0;border-radius:6px;background:{{ t.bg }};color:{{ t.fg }};font-family:inherit;font-size:12px;cursor:pointer">{{ t.name }}</button>
+            </sc-for>
+          </div>
+        </label>
+        <label style="flex:1 1 140px;display:flex;flex-direction:column;gap:6px">
+          <span style="font-size:10.5px;letter-spacing:0.12em;color:oklch(0.68 0.012 80)">BY</span>
+          <input value="{{ formEnd }}" onChange="{{ onEnd }}" style="padding:10px 12px;border:1px solid oklch(0.32 0.01 70);border-radius:8px;background:oklch(0.16 0.008 70);color:oklch(0.93 0.012 80);font-family:inherit;font-size:13.5px;outline:none" style-focus="border-color:oklch(0.74 0.13 62)" />
+        </label>
+        <button style="padding:11px 20px;border:0;border-radius:8px;background:oklch(0.74 0.13 62);color:oklch(0.2 0.03 62);font-family:inherit;font-size:12.5px;font-weight:700;letter-spacing:0.04em;cursor:pointer" style-hover="background:oklch(0.8 0.13 62)">CREATE GOAL</button>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px;border:1px solid {{ feasBorder }};border-radius:10px;background:oklch(0.175 0.009 70)">
+        <span style="font-size:19px;font-weight:600;letter-spacing:-0.02em;color:{{ feasColor }}">{{ feasRate }}</span>
+        <span style="flex:1 1 240px;font-size:12.5px;line-height:1.5;color:oklch(0.86 0.012 80);text-wrap:pretty">{{ feasText }}</span>
+      </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <span style="font-size:11px;color:oklch(0.68 0.012 80)">try:</span>
+        <sc-for list="{{ presets }}" as="p" hint-placeholder-count="3">
+          <button onClick="{{ p.go }}" style="padding:5px 11px;border:1px solid oklch(0.32 0.01 70);border-radius:999px;background:transparent;color:oklch(0.78 0.012 80);font-family:inherit;font-size:11.5px;cursor:pointer" style-hover="border-color:oklch(0.55 0.012 80)">{{ p.name }}</button>
+        </sc-for>
+      </div>
+    </section>
+
+    <sc-if value="{{ showPast }}" hint-placeholder-val="{{ true }}">
+    <section style="display:flex;flex-direction:column;gap:14px">
+      <span style="font-size:11px;font-weight:700;letter-spacing:0.16em;color:oklch(0.74 0.13 62)">PAST GOALS</span>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <sc-for list="{{ past }}" as="g" hint-placeholder-count="3">
+          <div style="display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,1fr) auto;align-items:center;gap:18px;padding:14px 16px;border:1px solid oklch(0.27 0.01 70);border-radius:10px;background:oklch(0.185 0.009 70)">
+            <div style="display:flex;flex-direction:column;gap:3px;min-width:0">
+              <span style="font-size:13.5px;font-weight:500">{{ g.title }}</span>
+              <span style="font-size:11.5px;color:oklch(0.7 0.012 80)">{{ g.window }}</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+              <span style="height:5px;border-radius:3px;background:oklch(0.26 0.01 70);overflow:hidden"><span style="display:block;height:5px;border-radius:3px;background:{{ g.color }};width:{{ g.w }}%"></span></span>
+              <span style="font-size:11.5px;color:oklch(0.74 0.012 80)">{{ g.result }}</span>
+            </div>
+            <span style="padding:3px 10px;border-radius:999px;background:{{ g.badgeBg }};color:{{ g.badgeFg }};font-size:10.5px;font-weight:700;letter-spacing:0.08em">{{ g.badge }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+    </sc-if>
+  </div>
+
+  <div style="position:fixed;left:14px;bottom:12px;pointer-events:none;padding:3px 9px;border:1px solid oklch(0.3 0.01 70);border-radius:5px;background:oklch(0.19 0.009 70);font-size:10.5px;letter-spacing:0.08em;color:oklch(0.7 0.012 80)">normal</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1100},&quot;showPastGoals&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { amount: "500", type: "releases", end: "2027-01-01" };
+
+  AMBER = "oklch(0.74 0.13 62)";
+  CYAN = "oklch(0.72 0.13 200)";
+  RED = "oklch(0.7 0.13 30)";
+
+  renderVals() {
+    const target = 500, actual = 312, daysElapsed = 255, daysTotal = 366, daysLeft = daysTotal - daysElapsed;
+    const pace = actual / daysElapsed;
+    const expected = Math.round(target * (daysElapsed / daysTotal));
+    const needed = (target - actual) / daysLeft;
+    const projected = Math.round(actual + pace * daysLeft);
+    const behind = expected - actual;
+
+    const amt = parseInt(this.state.amount, 10) || 0;
+    const endMs = Date.parse(this.state.end);
+    const formDays = Number.isNaN(endMs) ? 0 : Math.max(1, Math.round((endMs - Date.parse("2026-09-12")) / 86400000));
+    const rate = amt / formDays;
+    const ratio = rate / pace;
+    const feas = ratio <= 0.85
+      ? { color: this.CYAN, border: "oklch(0.4 0.06 200)", text: "Comfortable. That's below your 1.22 / day average — you'd hit it around " + new Date(Date.parse("2026-09-12") + (amt / pace) * 86400000).toISOString().slice(0, 10) + " at your current pace." }
+      : ratio <= 1.25
+      ? { color: this.AMBER, border: "oklch(0.45 0.08 62)", text: "Realistic. Roughly your current pace of 1.22 / day, sustained for " + formDays + " days." }
+      : { color: this.RED, border: "oklch(0.42 0.09 30)", text: "Ambitious. That's " + ratio.toFixed(1) + "× your current pace — you'd need to log " + Math.ceil(rate - pace) + " more per day than you do now." };
+
+    return {
+      status: behind > 0 ? "BEHIND PACE" : "ON TRACK",
+      statusBg: behind > 0 ? "oklch(0.32 0.06 30)" : "oklch(0.3 0.05 200)",
+      statusFg: behind > 0 ? "oklch(0.86 0.09 30)" : "oklch(0.84 0.09 200)",
+      window: "01 Jan 2026 → 01 Jan 2027 · " + daysLeft + " days left",
+      actual,
+      target,
+      percentLine: Math.round((actual / target) * 100) + "% complete",
+      progressW: Math.round((actual / target) * 100),
+      paceW: Math.round((daysElapsed / daysTotal) * 100),
+      progressLabel: actual + " logged",
+      paceLabel: "even pace would be " + expected + " by today — you're " + Math.abs(behind) + " " + (behind > 0 ? "behind" : "ahead"),
+      metrics: [
+        { label: "REMAINING", value: target - actual, sub: "releases", color: "oklch(0.93 0.012 80)" },
+        { label: "DAYS LEFT", value: daysLeft, sub: "to 01 Jan", color: "oklch(0.93 0.012 80)" },
+        { label: "NEEDED / DAY", value: needed.toFixed(2), sub: "from here on", color: this.AMBER },
+        { label: "CURRENT PACE", value: pace.toFixed(2), sub: "this year's average", color: "oklch(0.93 0.012 80)" },
+        { label: "PROJECTED", value: projected, sub: projected >= target ? "clears the goal" : (target - projected) + " short", color: projected >= target ? this.CYAN : this.RED },
+      ],
+      projection: "At " + pace.toFixed(2) + " / day you finish the year on " + projected + " — " + (target - projected) + " short. One extra record on " + (target - projected) + " of the remaining " + daysLeft + " days closes the gap; otherwise moving the deadline to " + new Date(Date.parse("2026-09-12") + ((target - actual) / pace) * 86400000).toISOString().slice(0, 10) + " keeps the pace you actually have.",
+      showPast: this.props.showPastGoals ?? true,
+
+      formAmount: this.state.amount,
+      onAmount: e => this.setState({ amount: e.target.value }),
+      formEnd: this.state.end,
+      onEnd: e => this.setState({ end: e.target.value }),
+      types: ["releases", "artists", "labels"].map(name => {
+        const on = this.state.type === name;
+        return {
+          name,
+          bg: on ? "oklch(0.28 0.012 70)" : "transparent",
+          fg: on ? "oklch(0.93 0.012 80)" : "oklch(0.7 0.012 80)",
+          go: () => this.setState({ type: name }),
+        };
+      }),
+      feasRate: rate.toFixed(2) + " / day",
+      feasText: feas.text,
+      feasColor: feas.color,
+      feasBorder: feas.border,
+      presets: [
+        { name: "365 in a year", go: () => this.setState({ amount: "365", end: "2027-09-12" }) },
+        { name: "100 by new year", go: () => this.setState({ amount: "100", end: "2027-01-01" }) },
+        { name: "1000 in a year", go: () => this.setState({ amount: "1000", end: "2027-09-12" }) },
+      ],
+      past: [
+        { title: "1,500 releases", window: "01 Jan 2025 → 01 Jan 2026", w: 76, color: this.RED, result: "1,141 of 1,500 · 76%", badge: "MISSED", badgeBg: "oklch(0.3 0.05 30)", badgeFg: "oklch(0.86 0.09 30)" },
+        { title: "1,000 releases", window: "11 Mar 2024 → 01 Jan 2025", w: 100, color: this.CYAN, result: "hit on 02 Nov 2024 · 60 days early", badge: "COMPLETE", badgeBg: "oklch(0.3 0.05 200)", badgeFg: "oklch(0.84 0.09 200)" },
+        { title: "200 artists", window: "11 Mar 2024 → 01 Jul 2024", w: 100, color: this.CYAN, result: "hit on 19 Jun 2024 · 12 days early", badge: "COMPLETE", badgeBg: "oklch(0.3 0.05 200)", badgeFg: "oklch(0.84 0.09 200)" },
+      ],
+    };
+  }
+}
+</script>
+</body>
+</html>

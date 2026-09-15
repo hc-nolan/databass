@@ -1,10 +1,35 @@
-from flask import Blueprint, render_template, request, flash, redirect
+from flask import Blueprint, render_template, request, flash, redirect, jsonify
 from ..db.models import Label
 from ..db import update
 from ..api.util import Util
 from ..detail import build_label_detail
 
 label_bp = Blueprint("label_bp", __name__, template_folder="templates")
+
+
+def _apply_label_edit(label_id, edit_data: dict) -> Label:
+    label_data = Label.exists_by_id(label_id)
+    start = edit_data.get("start")
+    if start:
+        label_data.begin = start
+    end = edit_data.get("end")
+    if end:
+        label_data.end = end
+
+    image = edit_data.get("image")
+    if image:
+        if "http" and "://" in image:
+            new_image = Util.get_image(entity_type="label", entity_id=label_id, url=image)
+            label_data.image = new_image
+        else:
+            print("Image not a URL. Skipping.")
+
+    country = edit_data.get("country")
+    if country:
+        label_data.country = country
+
+    update(label_data)
+    return label_data
 
 
 @label_bp.route("/label/<int:label_id>", methods=["GET"])
@@ -91,3 +116,40 @@ def edit_label(label_id):
 #     elif request.method == 'POST':
 #         pass
 # TODO: implement delete_label
+
+
+@label_bp.route("/api/label/<int:label_id>", methods=["GET"])
+def api_label(label_id):
+    label_data = Label.exists_by_id(label_id)
+    if not label_data:
+        return jsonify({"error": f"No label with id {label_id} found."}), 404
+    return jsonify(build_label_detail(label_data))
+
+
+@label_bp.route("/api/label/<int:label_id>/edit", methods=["GET"])
+def api_edit_label_get(label_id):
+    label_data = Label.exists_by_id(label_id)
+    if not label_data:
+        return jsonify({"error": f"No label with id {label_id} found."}), 404
+    countries = Label.get_distinct_column_values("country")
+    countries = sorted([c for c in countries if c is not None])
+    return jsonify(
+        {
+            "id": label_data.id,
+            "name": label_data.name,
+            "begin": label_data.begin,
+            "end": label_data.end,
+            "country": label_data.country,
+            "image": label_data.image[1:] if label_data.image else None,
+            "countries": countries,
+        }
+    )
+
+
+@label_bp.route("/api/label/<int:label_id>", methods=["PUT"])
+def api_edit_label(label_id):
+    if not Label.exists_by_id(label_id):
+        return jsonify({"error": f"No label with id {label_id} found."}), 404
+    edit_data = request.get_json() or {}
+    _apply_label_edit(label_id, edit_data)
+    return jsonify(build_label_detail(Label.exists_by_id(label_id)))

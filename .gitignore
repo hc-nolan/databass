@@ -14,3 +14,6 @@ src/databass/static/dist/*
 style.css.map
 src/databass/static/src/less/style.css
 *migrations*
+.claude
+.serena
+.playwright-mcp

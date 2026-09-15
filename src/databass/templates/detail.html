@@ -72,9 +72,23 @@
                 </div>
                 <div style="display:flex;flex-direction:column;gap:14px">
                     {% for e in data.entries %}
-                    <div class="diary-entry">
-                        <span class="diary-entry__date">{{ e.date }}</span>
+                    <div class="diary-entry" data-review-id="{{ e.id }}">
+                        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+                            <span class="diary-entry__date">{{ e.date }}</span>
+                            <span style="display:flex;gap:8px">
+                                <button type="button" class="btn-ghost diary-entry__edit-btn">edit</button>
+                                <button type="button" class="btn-ghost btn-ghost--danger delete-btn" data-id="{{ e.id }}" data-type="review">delete</button>
+                            </span>
+                        </div>
                         <p class="diary-entry__text">{{ e.text }}</p>
+                        <form method="POST" action="/release/{{ data.id }}/edit_review" class="diary-entry__edit-form" style="display:flex;flex-direction:column;gap:10px" hidden>
+                            <input type="hidden" name="id" value="{{ e.id }}">
+                            <textarea name="text" class="field" rows="3" required>{{ e.text }}</textarea>
+                            <div class="popup-actions" style="justify-content:flex-start">
+                                <button type="submit" class="btn-primary">save</button>
+                                <button type="button" class="btn-ghost diary-entry__cancel-btn">cancel</button>
+                            </div>
+                        </form>
                     </div>
                     {% endfor %}
                 </div>

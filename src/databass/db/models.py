@@ -72,6 +72,19 @@ class Base(DeclarativeBase):
         return round(result, 2)
 
     @classmethod
+    def exists_by_id(cls, item_id: int):
+        """
+        Check if an item exists in the database by its ID
+        :param item_id: Item's ID (primary key)
+        :return: The item, if it exists, or False if the item does not exist
+        """
+        try:
+            result = app_db.session.query(cls).filter(cls.id == item_id).one_or_none()
+            return result if result else None
+        except Exception:
+            return None
+
+    @classmethod
     def exists_by_name(cls, name: str) -> Optional[Base]:
         """
         Check if an entry exists in the database by its name.
@@ -162,19 +175,6 @@ class MusicBrainzEntity(Base):
             return results if isinstance(results, int) else None
         except Exception:
             return 0
-
-    @classmethod
-    def exists_by_id(cls, item_id: int):
-        """
-        Check if an item exists in the database by its ID
-        :param item_id: Item's ID (primary key)
-        :return: The item, if it exists, or False if the item does not exist
-        """
-        try:
-            result = app_db.session.query(cls).filter(cls.id == item_id).one_or_none()
-            return result if result else None
-        except Exception:
-            return None
 
     @classmethod
     def get_distinct_column_values(cls, column: str) -> list:
@@ -605,6 +605,14 @@ class Release(MusicBrainzEntity):
             "runtime_hours": round((total_runtime or 0) / 3600000, 1),
             "mean_rating": round((avg_rating or 0) / 10, 1),
         }
+
+    @classmethod
+    def first_listen_date(cls) -> Optional[date]:
+        """Date of the earliest logged listen, or None if nothing is logged."""
+        earliest = app_db.session.query(func.min(cls.listen_date)).scalar()
+        if not earliest:
+            return None
+        return earliest.date() if hasattr(earliest, "date") else earliest
 
     @classmethod
     def days_span(cls, year: Optional[int] = None) -> int:

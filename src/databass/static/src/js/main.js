@@ -520,8 +520,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('click', function(event) {
         if (event.target && event.target.classList.contains('delete-btn')) {
-            let deleteBtn = document.querySelector("#delete-btn");
-            handleDeleteButton(deleteBtn);
+            handleDeleteButton(event.target);
         }
 
         if (event.target && event.target.id === 'edit-btn') {
@@ -535,6 +534,20 @@ document.addEventListener('DOMContentLoaded', () => {
             if (window.location.pathname.startsWith('/label')) {
                 editEntity(editButton, 'label');
             }
+        }
+
+        if (event.target && event.target.classList.contains('diary-entry__edit-btn')) {
+            const entry = event.target.closest('.diary-entry');
+            entry.querySelector('.diary-entry__text').hidden = true;
+            event.target.hidden = true;
+            entry.querySelector('.diary-entry__edit-form').hidden = false;
+        }
+
+        if (event.target && event.target.classList.contains('diary-entry__cancel-btn')) {
+            const entry = event.target.closest('.diary-entry');
+            entry.querySelector('.diary-entry__edit-form').hidden = true;
+            entry.querySelector('.diary-entry__text').hidden = false;
+            entry.querySelector('.diary-entry__edit-btn').hidden = false;
         }
 
     });
