@@ -186,12 +186,14 @@ def delete():
         flash(error)
         return redirect("/error", code=302)
 
-    if not models.Release.exists_by_id(deletion_id):
-        error = f"No release with id {deletion_id} found."
+    if not db.get_model(deletion_type).exists_by_id(deletion_id):
+        error = f"No {deletion_type} with id {deletion_id} found."
         flash(error)
         return redirect("/error", code=302)
     print(f"Deleting {deletion_type} {deletion_id}")
     db.delete(item_type=deletion_type, item_id=deletion_id)
+    if deletion_type == "review":
+        return redirect(request.referrer, 302)
     return redirect("/", 302)
 
 
@@ -208,9 +210,36 @@ def add_review(release_id):
         error = "Request missing one of the required variables: text"
         flash(error)
         return redirect("/error", code=302)
-    # Perform deletion
+
+    # Construct and add the review
     new_review = db.construct_item("review", review_data)
     db.insert(new_review)
+    return redirect(request.referrer, 302)
+
+
+@release_bp.route("/release/<string:release_id>/edit_review", methods=["POST"])
+def edit_review(release_id):
+    # Make sure release exists before doing anything
+    if not models.Release.exists_by_id(int(release_id)):
+        error = f"No release with ID {release_id} found"
+        flash(error)
+        return redirect("/error", code=302)
+    # Ensure request has required data
+    review_data = request.form.to_dict()
+    if "id" not in review_data.keys() or "text" not in review_data.keys():
+        error = "Request missing one of the required variables: id, text"
+        flash(error)
+        return redirect("/error", code=302)
+
+    # Edit the review
+    review = models.Review.exists_by_id(review_data["id"])
+    if not review or review.release_id != int(release_id):
+        error = f"No review with ID {review_data['id']} found for release {release_id}"
+        flash(error)
+        return redirect("/error", code=302)
+    review.text = review_data["text"]
+    db.update(review)
+
     return redirect(request.referrer, 302)
 
 
