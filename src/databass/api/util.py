@@ -122,7 +122,7 @@ class Util:
         )
         if response:
             ext = Util.get_image_type_from_url(url)
-            img_filepath = IMG_BASE_PATH + f"/{entity_type}/" + str(entity_id) + ext
+            img_filepath = IMG_BASE_PATH + f"/{entity_type}/" + str(uuid4()) + ext
             with open(img_filepath, "wb") as img_file:
                 img_file.write(response.content)
             return img_filepath.replace("databass/", "")
@@ -242,7 +242,7 @@ class Util:
     def write_image(
         entity_id: int, entity_type: str, img_type: str, img_bytes: bytes
     ) -> str:
-        file_name = uuid4() + img_type
+        file_name = str(uuid4()) + img_type
         file_path = IMG_BASE_PATH + "/" + entity_type + "/" + file_name
         with open(file_path, "wb") as img_file:
             img_file.write(img_bytes)
