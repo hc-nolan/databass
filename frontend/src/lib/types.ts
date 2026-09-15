@@ -303,3 +303,14 @@ export interface GoalsData {
 	goal_presets: GoalPreset[];
 	goal_types: GoalType[];
 }
+
+export interface CompletedGoal {
+	type: string;
+	amount: number;
+	end_year: number;
+}
+
+export interface SubmitResponse {
+	ok: true;
+	completed_goals: CompletedGoal[];
+}

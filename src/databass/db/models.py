@@ -1535,12 +1535,15 @@ class Goal(Base):
             return []
 
     @classmethod
-    def check_goals(cls) -> None:
+    def check_goals(cls) -> list[Goal]:
         """
         Checks all incomplete goals and updates them if the goal has been met.
 
         This method retrieves all incomplete goals from the database, then for each goal it calls the `update_goal()` method to check if the goal has been met based on the number of new releases since the goal's start date. If the goal has been met, the `end_actual` attribute is updated to the current time, and the updated goal is saved to the database.
+
+        Returns the list of goals that were newly completed by this check.
         """
+        newly_completed = []
         active_goals = cls.get_incomplete()
         if active_goals is not None:
             for goal in active_goals:
@@ -1550,6 +1553,8 @@ class Goal(Base):
                     from .operations import update
 
                     update(goal)
+                    newly_completed.append(goal)
+        return newly_completed
 
 
 class Review(Base):

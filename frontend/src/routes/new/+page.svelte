@@ -1,9 +1,11 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { page as pageState } from '$app/state';
 	import { apiGet, apiPost } from '$lib/api';
-	import type { NewListenData, SearchResultItem } from '$lib/types';
+	import type { NewListenData, SearchResultItem, SubmitResponse } from '$lib/types';
 	import { headerState } from '$lib/chrome.svelte';
+	import { goalNoticeState } from '$lib/goalNotice.svelte';
 	import { ratingHint } from '$lib/format';
 
 	let data = $state<NewListenData | null>(null);
@@ -90,8 +92,9 @@
 	async function save() {
 		saving = true;
 		try {
+			let res: SubmitResponse | undefined;
 			if (manualMode) {
-				await apiPost('/submit', {
+				res = await apiPost<SubmitResponse>('/submit', {
 					manual_submit: true,
 					name: manual.name,
 					artist: manual.artist,
@@ -107,7 +110,7 @@
 					note: note || null
 				});
 			} else if (selected) {
-				await apiPost('/submit', {
+				res = await apiPost<SubmitResponse>('/submit', {
 					release_group_id: selected.release_group_id,
 					release_name: selected.release.name,
 					release_mbid: selected.release.mbid,
@@ -126,6 +129,8 @@
 				});
 			}
 			saved = true;
+			goalNoticeState.pending = res?.completed_goals ?? [];
+			goto('/');
 		} finally {
 			saving = false;
 		}
@@ -340,6 +345,14 @@
 								onclick={() => toggleGenre(name)}
 							>
 								{name}
+							</button>
+						{/each}
+						{#each genres.filter((g) => !(data?.all_genres ?? []).includes(g)) as name (name)}
+							<button
+								class="border-amber-soft-border bg-amber-soft-bg text-amber-soft-fg cursor-pointer rounded-full border px-2.5 py-1 text-xs"
+								onclick={() => toggleGenre(name)}
+							>
+								{name} ×
 							</button>
 						{/each}
 					</div>

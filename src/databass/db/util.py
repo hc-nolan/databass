@@ -133,14 +133,14 @@ def ensure_db_placeholders():
         pass
 
 
-def handle_submit_data(submit_data: dict) -> None:
+def handle_submit_data(submit_data: dict) -> list[Goal]:
     """
     Process dictionary data from routes.submit()
     - Fetches release runtime from MusicBrainz, if a MBID is provided
     - Checks if matching label/artist exists in the db, creates one if it doesn't
     - Inserts the new release and subgenres
     :param submit_data:
-    :return:
+    :return: list of goals that were newly completed as a result of this submission
     """
     from ..api import MusicBrainz
 
@@ -180,8 +180,10 @@ def handle_submit_data(submit_data: dict) -> None:
         submit_data["main_genre_id"] = main_genre.id
 
     genres = []
-    if submit_data.get("genres"):
-        for g in submit_data["genres"].split(","):
+    raw_genres = submit_data.get("genres")
+    if raw_genres:
+        genre_names = raw_genres if isinstance(raw_genres, list) else raw_genres.split(",")
+        for g in genre_names:
             genres.append(Genre.create_if_not_exists(g))
     submit_data["genres"] = genres
     note = submit_data.pop("note", None)
@@ -193,4 +195,4 @@ def handle_submit_data(submit_data: dict) -> None:
         )
         insert(review)
 
-    Goal.check_goals()
+    return Goal.check_goals()

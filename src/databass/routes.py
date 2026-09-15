@@ -361,11 +361,16 @@ def register_routes(app):
                 release_data = get_release_data(data)
 
         try:
-            handle_submit_data(release_data)
+            completed_goals = handle_submit_data(release_data)
         except IntegrityError as err:
             flash(str(err))
             return redirect("/error")
 
+        if completed_goals:
+            flash(
+                f"Goal completed: {completed_goals[0].amount} "
+                f"{_goal_type_label(completed_goals[0].type)} in {completed_goals[0].end.year}"
+            )
         return redirect("/", code=302)
 
     @app.route("/browse")
@@ -697,11 +702,16 @@ def register_routes(app):
             release_data = get_release_data(data)
 
         try:
-            handle_submit_data(release_data)
+            completed_goals = handle_submit_data(release_data)
         except IntegrityError as err:
             return jsonify({"error": str(err)}), 400
 
-        return jsonify({"ok": True}), 201
+        return jsonify(
+            {
+                "ok": True,
+                "completed_goals": [build_completed_goal_notice(g) for g in completed_goals],
+            }
+        ), 201
 
     @app.route("/api/browse/<string:tab>", methods=["GET"])
     def api_browse(tab):
@@ -943,6 +953,15 @@ GOAL_TYPE_LABELS = {"release": "releases", "artist": "artists", "label": "labels
 
 def _goal_type_label(goal_type: str) -> str:
     return GOAL_TYPE_LABELS.get(goal_type, "releases")
+
+
+def build_completed_goal_notice(goal: "models.Goal") -> dict:
+    """Builds the payload describing a just-completed goal, for the submit response."""
+    return {
+        "type": goal.type,
+        "amount": goal.amount,
+        "end_year": goal.end.year,
+    }
 
 
 def build_active_goal_view(goal: "models.Goal") -> dict:
