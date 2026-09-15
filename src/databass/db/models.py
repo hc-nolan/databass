@@ -607,6 +607,14 @@ class Release(MusicBrainzEntity):
         }
 
     @classmethod
+    def first_listen_date(cls) -> Optional[date]:
+        """Date of the earliest logged listen, or None if nothing is logged."""
+        earliest = app_db.session.query(func.min(cls.listen_date)).scalar()
+        if not earliest:
+            return None
+        return earliest.date() if hasattr(earliest, "date") else earliest
+
+    @classmethod
     def days_span(cls, year: Optional[int] = None) -> int:
         """
         Number of days elapsed in a calendar year (up to today, if it's the

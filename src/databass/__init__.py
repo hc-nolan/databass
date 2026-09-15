@@ -1,6 +1,8 @@
 import os
 from datetime import datetime
+from decimal import Decimal
 from flask import Flask, g
+from flask.json.provider import DefaultJSONProvider
 from flask_assets import Environment, Bundle
 from dotenv import load_dotenv
 from .db.base import app_db
@@ -12,9 +14,22 @@ VERSION = os.environ.get("VERSION")
 print(f"App version: {VERSION}")
 
 
+class AppJSONProvider(DefaultJSONProvider):
+    """Serialize Decimal (from Postgres avg()/sum() aggregates) as JSON
+    numbers instead of Flask's default fallback to a string."""
+
+    @staticmethod
+    def default(o):
+        if isinstance(o, Decimal):
+            return float(o)
+        return DefaultJSONProvider.default(o)
+
+
 def create_app():
     app = Flask(__name__, instance_relative_config=False)
     app.config.from_object("config.Config")
+    app.json_provider_class = AppJSONProvider
+    app.json = AppJSONProvider(app)
 
     is_testing = (
         "PYTEST_CURRENT_TEST" in os.environ

@@ -1,11 +1,104 @@
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, flash
+from flask import Blueprint, render_template, request, redirect, flash, jsonify
 from .. import db
 from ..db import models
 from ..api import Util
 from ..detail import build_release_detail
 
 release_bp = Blueprint("release_bp", __name__, template_folder="templates")
+
+
+def _release_edit_data(release_data: models.Release) -> dict:
+    label_data = models.Label.exists_by_id(release_data.label_id)
+    artist_data = models.Artist.exists_by_id(release_data.artist_id)
+    countries = sorted(models.Release.get_distinct_column_values("country"))
+    return {
+        "id": release_data.id,
+        "name": release_data.name,
+        "year": release_data.year,
+        "main_genre": release_data.main_genre.name if release_data.main_genre else None,
+        "genres": [g.name for g in release_data.genres],
+        "rating": release_data.rating,
+        "image": release_data.image[1:] if release_data.image else None,
+        "listen_date": release_data.listen_date.strftime("%Y-%m-%d")
+        if release_data.listen_date
+        else None,
+        "country": release_data.country,
+        "artist": artist_data.name if artist_data else None,
+        "label": label_data.name if label_data else None,
+        "collab_artists": [a.name for a in release_data.collab_artists],
+        "countries": countries,
+    }
+
+
+def _apply_release_edit(release_id: str, edit_data: dict) -> models.Release:
+    """Shared edit logic for the form-encoded and JSON edit endpoints."""
+    submit_data = {}
+
+    image = edit_data.get("image")
+    if image:
+        if "http" and "://" in image:
+            new_image = Util.get_image(
+                entity_type="release", entity_id=release_id, url=image
+            )
+            submit_data["image"] = new_image
+        else:
+            print("Image not a URL. Skipping.")
+
+    year = edit_data.get("year")
+    if year:
+        submit_data["year"] = year
+
+    listen_date = edit_data.get("listen_date")
+    if listen_date:
+        submit_data["listen_date"] = datetime.strptime(listen_date, "%Y-%m-%d")
+
+    rating = edit_data.get("rating")
+    if rating:
+        submit_data["rating"] = rating
+
+    main_genre = edit_data.get("main_genre")
+    if main_genre:
+        submit_data["main_genre"] = models.Genre.create_if_not_exists(main_genre)
+
+    country = edit_data.get("country")
+    if country:
+        submit_data["country"] = country
+
+    genres = edit_data.get("genres")
+    if genres:
+        genre_names = genres if isinstance(genres, list) else genres.split(",")
+        submit_data["genres"] = [
+            models.Genre.create_if_not_exists(g) for g in genre_names
+        ]
+
+    if "collab_artists" in edit_data:
+        collab_artists = edit_data["collab_artists"]
+        collab_names = (
+            collab_artists if isinstance(collab_artists, list) else collab_artists.split(",")
+        )
+        collab_objs = []
+        for name in collab_names:
+            name = name.strip()
+            if name:
+                collab_id = models.Artist.create_if_not_exist(name)
+                collab_objs.append(models.Artist.exists_by_id(collab_id))
+        # unlike genres, an empty submission here is meaningful: it's how
+        # a collab credit gets removed, so always write the (possibly
+        # empty) list rather than only when non-empty
+        submit_data["collab_artists"] = collab_objs
+
+    updated_release = db.construct_item("release", submit_data)
+    # construct_item() will produce a unique ID primary key, so we need to set it to the original one for update() to work
+    updated_release.id = release_id
+    # grab the other release so we can inject the data that doesn't change
+    old_release = models.Release.exists_by_id(release_id)
+    updated_release.artist_id = old_release.artist_id
+    updated_release.label_id = old_release.label_id
+    updated_release.runtime = old_release.runtime
+    updated_release.track_count = old_release.track_count
+    db.update(updated_release)
+    return updated_release
 
 
 @release_bp.route("/release/<string:release_id>", methods=["GET"])
@@ -246,3 +339,80 @@ def edit_review(release_id):
 @release_bp.route("/releases", methods=["GET"])
 def releases():
     return redirect("/browse/releases", code=301)
+
+
+@release_bp.route("/api/release/<int:release_id>", methods=["GET"])
+def api_release(release_id):
+    release_data = models.Release.exists_by_id(release_id)
+    if not release_data:
+        return jsonify({"error": f"No release with id {release_id} found."}), 404
+    return jsonify(build_release_detail(release_data))
+
+
+@release_bp.route("/api/release/<int:release_id>/relisten", methods=["POST"])
+def api_relisten(release_id):
+    release_data = models.Release.exists_by_id(release_id)
+    if not release_data:
+        return jsonify({"error": f"No release with id {release_id} found."}), 404
+    release_data.listen_date = datetime.now()
+    db.update(release_data)
+    new_review = db.construct_item(
+        "review", {"release_id": release_id, "text": "Logged another listen."}
+    )
+    db.insert(new_review)
+    return jsonify(build_release_detail(models.Release.exists_by_id(release_id)))
+
+
+@release_bp.route("/api/release/<int:release_id>/edit", methods=["GET"])
+def api_edit_release_get(release_id):
+    release_data = models.Release.exists_by_id(release_id)
+    if not release_data:
+        return jsonify({"error": f"No release with id {release_id} found."}), 404
+    return jsonify(_release_edit_data(release_data))
+
+
+@release_bp.route("/api/release/<int:release_id>", methods=["PUT"])
+def api_edit_release(release_id):
+    release_data = models.Release.exists_by_id(release_id)
+    if not release_data:
+        return jsonify({"error": f"No release with id {release_id} found."}), 404
+    edit_data = request.get_json() or {}
+    try:
+        _apply_release_edit(release_id, edit_data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+    return jsonify(build_release_detail(models.Release.exists_by_id(release_id)))
+
+
+@release_bp.route("/api/release/<int:release_id>/reviews", methods=["POST"])
+def api_add_review(release_id):
+    if not models.Release.exists_by_id(release_id):
+        return jsonify({"error": f"No release with ID {release_id} found"}), 404
+    review_data = request.get_json() or {}
+    if "text" not in review_data:
+        return jsonify({"error": "Request missing required field: text"}), 400
+    new_review = db.construct_item(
+        "review", {"release_id": release_id, "text": review_data["text"]}
+    )
+    db.insert(new_review)
+    return jsonify(build_release_detail(models.Release.exists_by_id(release_id))), 201
+
+
+@release_bp.route("/api/release/<int:release_id>/reviews/<int:review_id>", methods=["PUT"])
+def api_edit_review(release_id, review_id):
+    if not models.Release.exists_by_id(release_id):
+        return jsonify({"error": f"No release with ID {release_id} found"}), 404
+    review_data = request.get_json() or {}
+    if "text" not in review_data:
+        return jsonify({"error": "Request missing required field: text"}), 400
+    review = models.Review.exists_by_id(review_id)
+    if not review or review.release_id != release_id:
+        return (
+            jsonify(
+                {"error": f"No review with ID {review_id} found for release {release_id}"}
+            ),
+            404,
+        )
+    review.text = review_data["text"]
+    db.update(review)
+    return jsonify(build_release_detail(models.Release.exists_by_id(release_id)))

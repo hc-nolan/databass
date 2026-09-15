@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,400;0,500;0,700;0,800;1,400&display=swap" rel="stylesheet">
+<style>
+  body { margin:0; background:oklch(0.16 0.008 70); }
+  a { color:oklch(0.93 0.012 80); text-decoration:none; }
+  a:hover { color:oklch(0.74 0.13 62); }
+  .cover { background-color:oklch(0.28 0.01 70); background-image:repeating-linear-gradient(135deg, oklch(0.32 0.012 70) 0 2px, transparent 2px 7px); }
+</style>
+</helmet>
+<div style="min-height:100vh;background:oklch(0.16 0.008 70);color:oklch(0.93 0.012 80);font-family:'Public Sans',Helvetica,Arial,sans-serif;font-size:13.5px;line-height:1.5;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased">
+
+  <header style="display:flex;flex-wrap:wrap;align-items:baseline;gap:20px 28px;padding:22px 28px;border-bottom:1px solid oklch(0.26 0.01 70)">
+    <div style="display:flex;align-items:baseline;gap:8px">
+      <span style="font-weight:800;font-size:23px;letter-spacing:-0.04em">databass</span>
+      <span style="font-size:10px;letter-spacing:0.12em;color:oklch(0.7 0.012 80)">v0.7</span>
+    </div>
+    <nav style="display:flex;flex-wrap:wrap;gap:2px;margin-right:auto">
+      <a href="#" style="padding:5px 11px;border-radius:999px;background:oklch(0.24 0.012 70);font-size:12px;letter-spacing:0.02em">home</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;font-size:12px;letter-spacing:0.02em;color:oklch(0.62 0.012 80)">releases</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;font-size:12px;letter-spacing:0.02em;color:oklch(0.62 0.012 80)">artists</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;font-size:12px;letter-spacing:0.02em;color:oklch(0.62 0.012 80)">labels</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;font-size:12px;letter-spacing:0.02em;color:oklch(0.62 0.012 80)">stats</a>
+      <a href="#" style="padding:5px 11px;border-radius:999px;font-size:12px;letter-spacing:0.02em;color:oklch(0.62 0.012 80)">goals</a>
+    </nav>
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="font-size:11px;color:oklch(0.66 0.012 80)">2,171 logged</span>
+      <span style="width:1px;height:14px;background:oklch(0.3 0.01 70)"></span>
+      <span style="font-size:11px;color:oklch(0.66 0.012 80)">day 255 / 2026</span>
+    </div>
+  </header>
+
+  <div style="display:flex;flex-wrap:wrap;align-items:flex-start;gap:28px;padding:28px;max-width:1440px;margin:0 auto">
+
+    <main style="flex:1 1 540px;min-width:0;display:flex;flex-direction:column;gap:26px">
+
+      <section style="display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:14px 16px;border:1px solid oklch(0.28 0.01 70);border-radius:10px;background:oklch(0.19 0.009 70)">
+        <span style="color:oklch(0.74 0.13 62);font-size:14px">›</span>
+        <input type="text" placeholder="log a release — artist, title, or MBID" style="flex:1 1 240px;min-width:0;background:transparent;border:0;outline:none;color:oklch(0.93 0.012 80);font-family:inherit;font-size:13px" />
+        <div style="display:flex;gap:8px;align-items:center">
+          <span style="font-size:10.5px;letter-spacing:0.08em;color:oklch(0.65 0.012 80)">TODAY</span>
+          <button style="padding:7px 14px;border:0;border-radius:6px;background:oklch(0.74 0.13 62);color:oklch(0.2 0.03 62);font-family:inherit;font-size:12px;font-weight:700;letter-spacing:0.03em;cursor:pointer" style-hover="background:oklch(0.8 0.13 62)">LOG</button>
+        </div>
+      </section>
+
+      <div style="display:flex;align-items:baseline;justify-content:space-between;gap:16px">
+        <h2 style="margin:0;font-size:15px;font-weight:700;letter-spacing:0.16em;text-transform:uppercase">Recent listening</h2>
+        <span style="font-size:11px;color:oklch(0.66 0.012 80)">sorted by listen date ↓</span>
+      </div>
+
+      <sc-for list="{{ groups }}" as="group" hint-placeholder-count="3">
+        <section style="display:flex;flex-direction:column;gap:2px;margin-bottom:22px">
+          <div style="display:flex;align-items:center;gap:14px;padding:0 2px 10px">
+            <span style="font-size:11px;font-weight:700;letter-spacing:0.14em;color:oklch(0.74 0.13 62)">{{ group.label }}</span>
+            <span style="flex:1;height:1px;background:oklch(0.26 0.01 70)"></span>
+            <span style="font-size:11px;color:oklch(0.65 0.012 80)">{{ group.meta }}</span>
+          </div>
+
+          <sc-for list="{{ group.items }}" as="item" hint-placeholder-count="3">
+            <article style="display:grid;grid-template-columns:68px minmax(0,1fr) auto;align-items:start;gap:18px;padding:14px 12px;border-radius:10px;border:1px solid transparent" style-hover="background:oklch(0.19 0.009 70);border-color:oklch(0.27 0.01 70)">
+              <div class="cover" style="width:68px;height:68px;border-radius:4px;display:flex;align-items:flex-end;padding:6px;box-sizing:border-box">
+                <span style="font-size:10px;font-weight:700;letter-spacing:0.1em;color:oklch(0.62 0.012 80)">{{ item.artKey }}</span>
+              </div>
+
+              <div style="display:flex;flex-direction:column;gap:6px;min-width:0">
+                <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:8px">
+                  <a href="#" style="font-size:15px;font-weight:500;letter-spacing:-0.005em">{{ item.title }}</a>
+                  <span style="font-size:11px;color:oklch(0.65 0.012 80)">{{ item.year }}</span>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:12px">
+                  <a href="#" style="color:oklch(0.7 0.012 80)">{{ item.artist }}</a>
+                  <span style="color:oklch(0.38 0.01 70)">/</span>
+                  <a href="#" style="color:oklch(0.7 0.012 80)">{{ item.label }}</a>
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:2px">
+                  <span style="padding:2px 8px;border:1px solid oklch(0.32 0.01 70);border-radius:999px;font-size:10px;letter-spacing:0.06em;color:oklch(0.66 0.012 80)">{{ item.genre }}</span>
+                  <sc-for list="{{ item.subgenres }}" as="sub" hint-placeholder-count="2">
+                    <span style="padding:2px 8px;border-radius:999px;font-size:10px;letter-spacing:0.06em;color:oklch(0.65 0.012 80)">{{ sub }}</span>
+                  </sc-for>
+                </div>
+                <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+                  <p style="margin:6px 0 0;max-width:58ch;font-style:italic;font-weight:400;font-size:14px;line-height:1.55;color:oklch(0.68 0.012 80);text-wrap:pretty">{{ item.note }}</p>
+                </sc-if>
+              </div>
+
+              <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px;min-width:96px">
+                <div style="display:flex;align-items:baseline;gap:2px">
+                  <span style="font-weight:500;font-size:22px;line-height:1;letter-spacing:-0.03em;color:oklch(0.93 0.012 80)">{{ item.score }}</span>
+                  <span style="font-size:10px;color:oklch(0.65 0.012 80)">{{ item.scoreSuffix }}</span>
+                </div>
+                <div style="width:88px;height:3px;border-radius:2px;background:oklch(0.28 0.01 70);overflow:hidden">
+                  <div style="height:3px;border-radius:2px;background:oklch(0.74 0.13 62);width:{{ item.pct }}%"></div>
+                </div>
+                <span style="font-size:10.5px;color:oklch(0.64 0.012 80)">{{ item.detail }}</span>
+              </div>
+            </article>
+          </sc-for>
+        </section>
+      </sc-for>
+
+      <button style="align-self:flex-start;padding:9px 16px;border:1px solid oklch(0.3 0.01 70);border-radius:8px;background:transparent;color:oklch(0.7 0.012 80);font-family:inherit;font-size:12px;letter-spacing:0.04em;cursor:pointer" style-hover="border-color:oklch(0.45 0.012 80);color:oklch(0.93 0.012 80)">LOAD EARLIER ↓</button>
+    </main>
+
+    <aside style="flex:1 1 290px;min-width:260px;display:flex;flex-direction:column;gap:16px">
+
+      <section style="padding:20px;border:1px solid oklch(0.28 0.01 70);border-radius:12px;background:oklch(0.19 0.009 70)">
+        <div style="font-size:10.5px;letter-spacing:0.14em;color:oklch(0.68 0.012 80)">THIS YEAR</div>
+        <div style="display:flex;align-items:baseline;gap:8px;margin-top:10px">
+          <span style="font-weight:500;font-size:42px;line-height:1;letter-spacing:-0.05em">312</span>
+          <span style="font-size:11px;color:oklch(0.68 0.012 80)">releases</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:7px 12px;margin-top:16px;font-size:12px">
+          <span style="color:oklch(0.7 0.012 80)">new artists</span><span>168</span>
+          <span style="color:oklch(0.7 0.012 80)">new labels</span><span>122</span>
+          <span style="color:oklch(0.7 0.012 80)">listening time</span><span>241.6h</span>
+          <span style="color:oklch(0.7 0.012 80)">average score</span><span>5.2</span>
+          <span style="color:oklch(0.7 0.012 80)">pace</span><span style="color:oklch(0.74 0.13 62)">1.22 / day</span>
+        </div>
+      </section>
+
+      <section style="padding:20px;border:1px solid oklch(0.28 0.01 70);border-radius:12px;background:oklch(0.19 0.009 70)">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;gap:10px">
+          <span style="font-size:10.5px;letter-spacing:0.14em;color:oklch(0.68 0.012 80)">GOAL</span>
+          <span style="font-size:10.5px;color:oklch(0.78 0.1 30)">BEHIND PACE</span>
+        </div>
+        <div style="margin-top:10px;font-size:14px">500 releases in 2026</div>
+        <div style="display:flex;align-items:baseline;gap:6px;margin-top:12px">
+          <span style="font-weight:500;font-size:30px;line-height:1;letter-spacing:-0.04em">62</span>
+          <span style="font-size:12px;color:oklch(0.68 0.012 80)">% complete</span>
+        </div>
+        <div style="height:5px;border-radius:3px;background:oklch(0.28 0.01 70);margin-top:12px;overflow:hidden">
+          <div style="width:62%;height:5px;border-radius:3px;background:oklch(0.72 0.13 200)"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr auto;gap:7px 12px;margin-top:14px;font-size:12px">
+          <span style="color:oklch(0.7 0.012 80)">remaining</span><span>188</span>
+          <span style="color:oklch(0.7 0.012 80)">days left</span><span>110</span>
+          <span style="color:oklch(0.7 0.012 80)">needed / day</span><span>1.71</span>
+        </div>
+      </section>
+
+      <section style="padding:20px;border:1px solid oklch(0.28 0.01 70);border-radius:12px;background:oklch(0.19 0.009 70)">
+        <div style="font-size:10.5px;letter-spacing:0.14em;color:oklch(0.68 0.012 80)">SCORE SPREAD</div>
+        <div style="display:flex;align-items:flex-end;gap:5px;height:64px;margin-top:16px">
+          <div style="flex:1;height:6%;background:oklch(0.36 0.012 70);border-radius:2px"></div>
+          <div style="flex:1;height:11%;background:oklch(0.36 0.012 70);border-radius:2px"></div>
+          <div style="flex:1;height:22%;background:oklch(0.36 0.012 70);border-radius:2px"></div>
+          <div style="flex:1;height:38%;background:oklch(0.36 0.012 70);border-radius:2px"></div>
+          <div style="flex:1;height:61%;background:oklch(0.4 0.012 70);border-radius:2px"></div>
+          <div style="flex:1;height:100%;background:oklch(0.74 0.13 62);border-radius:2px"></div>
+          <div style="flex:1;height:78%;background:oklch(0.4 0.012 70);border-radius:2px"></div>
+          <div style="flex:1;height:44%;background:oklch(0.36 0.012 70);border-radius:2px"></div>
+          <div style="flex:1;height:19%;background:oklch(0.36 0.012 70);border-radius:2px"></div>
+          <div style="flex:1;height:7%;background:oklch(0.36 0.012 70);border-radius:2px"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:10px;color:oklch(0.64 0.012 80)">
+          <span>1</span><span>median 5.5</span><span>10</span>
+        </div>
+      </section>
+
+      <section style="padding:20px;border:1px solid oklch(0.28 0.01 70);border-radius:12px;background:oklch(0.19 0.009 70)">
+        <div style="font-size:10.5px;letter-spacing:0.14em;color:oklch(0.68 0.012 80)">ON REPEAT — 90 DAYS</div>
+        <div style="display:flex;flex-direction:column;gap:12px;margin-top:14px">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="cover" style="width:34px;height:34px;border-radius:3px;flex:0 0 auto"></div>
+            <div style="flex:1;min-width:0"><a href="#" style="font-size:12.5px">The Field Mice</a><div style="font-size:10.5px;color:oklch(0.66 0.012 80)">7 releases · avg 6.4</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="cover" style="width:34px;height:34px;border-radius:3px;flex:0 0 auto"></div>
+            <div style="flex:1;min-width:0"><a href="#" style="font-size:12.5px">Sarah Records</a><div style="font-size:10.5px;color:oklch(0.66 0.012 80)">11 releases · avg 6.1</div></div>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div class="cover" style="width:34px;height:34px;border-radius:3px;flex:0 0 auto"></div>
+            <div style="flex:1;min-width:0"><a href="#" style="font-size:12.5px">Sunn O)))</a><div style="font-size:10.5px;color:oklch(0.66 0.012 80)">5 releases · avg 5.8</div></div>
+          </div>
+        </div>
+      </section>
+    </aside>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Log&quot;},&quot;ratingScale&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;0–10&quot;,&quot;percent&quot;,&quot;stars&quot;],&quot;default&quot;:&quot;0–10&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Log&quot;}}">
+class Component extends DCLogic {
+  data() {
+    return [
+      { d: "2026-09-12", items: [
+        { title: "ØØ Void", artist: "Sunn O)))", label: "Rise Above", year: 2000, genre: "drone metal", subgenres: ["dark ambient"], pct: 55, runtime: "68m", tracks: 4,
+          note: "Put this on while the power was out. Forty minutes in I stopped noticing it was music." },
+        { title: "Snowball + Singles", artist: "The Field Mice", label: "Sarah Records", year: 1989, genre: "indie pop", subgenres: ["twee pop", "dream pop"], pct: 60, runtime: "52m", tracks: 16,
+          note: "Second pass this year. The singles hold up better than the album half." },
+      ]},
+      { d: "2026-09-11", items: [
+        { title: "Guitar Romantic", artist: "The Exploding Hearts", label: "Dirtnap", year: 2003, genre: "punk rock", subgenres: ["power pop"], pct: 65, runtime: "29m", tracks: 10,
+          note: "Shortest record I logged all month and the only one I replayed immediately." },
+        { title: "Storyteller", artist: "Razorcuts", label: "Creation", year: 1988, genre: "indie rock", subgenres: ["jangle pop"], pct: 60, runtime: "41m", tracks: 12,
+          note: "Jangle by the yard. Pleasant, forgettable, exactly what I wanted at 2am." },
+        { title: "Dog Problems", artist: "The Format", label: "The Vanity Label", year: 2006, genre: "indie rock", subgenres: ["baroque pop"], pct: 15, runtime: "45m", tracks: 12,
+          note: "Nostalgia is not a rating. Logged it honestly." },
+      ]},
+      { d: "2026-09-09", items: [
+        { title: "Bee Thousand", artist: "Guided by Voices", label: "Scat", year: 1994, genre: "indie rock", subgenres: ["lo-fi"], pct: 80, runtime: "36m", tracks: 20,
+          note: "Every song ends before it should, which is the whole point." },
+        { title: "Endless Summer", artist: "Christian Fennesz", label: "Mego", year: 2001, genre: "ambient", subgenres: ["glitch"], pct: 75, runtime: "48m", tracks: 8,
+          note: "Warm static. Good for the first cold morning." },
+      ]},
+    ];
+  }
+
+  fmtDay(iso) {
+    const [y, m, d] = iso.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    const today = new Date(Date.UTC(2026, 8, 12));
+    const diff = Math.round((today - dt) / 86400000);
+    const wd = ["SUN","MON","TUE","WED","THU","FRI","SAT"][dt.getUTCDay()];
+    const mo = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"][m - 1];
+    if (diff === 0) return "TODAY · " + wd + " " + String(d).padStart(2, "0") + " " + mo;
+    if (diff === 1) return "YESTERDAY · " + wd + " " + String(d).padStart(2, "0") + " " + mo;
+    return wd + " " + String(d).padStart(2, "0") + " " + mo + " · " + diff + "D AGO";
+  }
+
+  score(pct) {
+    const scale = this.props.ratingScale ?? "0–10";
+    if (scale === "percent") return { score: String(pct), suffix: "%" };
+    if (scale === "stars") return { score: (Math.round(pct / 10) / 2).toFixed(1), suffix: "★" };
+    return { score: (pct / 10).toFixed(1), suffix: "/10" };
+  }
+
+  renderVals() {
+    const groups = this.data().map(g => {
+      const mins = g.items.reduce((a, i) => a + parseInt(i.runtime, 10), 0);
+      return {
+        label: this.fmtDay(g.d),
+        meta: g.items.length + (g.items.length === 1 ? " release · " : " releases · ") +
+          (mins >= 60 ? Math.floor(mins / 60) + "h " + (mins % 60) + "m" : mins + "m"),
+        items: g.items.map(i => {
+          const s = this.score(i.pct);
+          return {
+            ...i,
+            score: s.score,
+            scoreSuffix: s.suffix,
+            artKey: i.artist.split(/\s+/).map(w => w[0]).join("").slice(0, 4).toUpperCase(),
+            detail: i.runtime + " · " + i.tracks + " tracks",
+            subgenres: i.subgenres,
+          };
+        }),
+      };
+    });
+    return { groups, showNotes: this.props.showNotes ?? true };
+  }
+}
+</script>
+</body>
+</html>
