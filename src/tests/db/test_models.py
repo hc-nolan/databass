@@ -1539,6 +1539,39 @@ class TestGoalGetPast:
         assert Goal.get_past() == []
 
 
+class TestGoalCheckGoals:
+    """Test suite for Goal.check_goals classmethod"""
+
+    def test_check_goals_returns_newly_completed_goals(self, mocker):
+        """Test that check_goals returns only the goals that just became completed"""
+        completed_goal = Goal(type="release", amount=1)
+        mocker.patch.object(
+            Goal, "current_amount", new_callable=mocker.PropertyMock, return_value=1
+        )
+        untouched_goal = Goal(type="release", amount=10)
+
+        mocker.patch.object(Goal, "get_incomplete", return_value=[completed_goal, untouched_goal])
+        mocker.patch("databass.db.operations.update")
+
+        result = Goal.check_goals()
+
+        assert result == [completed_goal]
+        assert completed_goal.completed is not None
+        assert untouched_goal.completed is None
+
+    def test_check_goals_returns_empty_list_when_none_completed(self, mocker):
+        """Test that check_goals returns an empty list if no goals were completed"""
+        untouched_goal = Goal(type="release", amount=10)
+        mocker.patch.object(
+            Goal, "current_amount", new_callable=mocker.PropertyMock, return_value=0
+        )
+
+        mocker.patch.object(Goal, "get_incomplete", return_value=[untouched_goal])
+        mocker.patch("databass.db.operations.update")
+
+        assert Goal.check_goals() == []
+
+
 class TestGenreCreateGenres:
     """Test suite for Genre.create_genres static method"""
 

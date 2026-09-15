@@ -2,9 +2,11 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { apiGet } from '$lib/api';
-	import type { HomeData, HomeEntriesResponse, HomeEntryGroup } from '$lib/types';
+	import type { CompletedGoal, HomeData, HomeEntriesResponse, HomeEntryGroup } from '$lib/types';
 	import { headerState } from '$lib/chrome.svelte';
+	import { goalNoticeState } from '$lib/goalNotice.svelte';
 	import ArtPlaceholder from '$lib/components/ArtPlaceholder.svelte';
+	import Modal from '$lib/components/Modal.svelte';
 	import { imageSrc } from '$lib/format';
 
 	let home = $state<HomeData | null>(null);
@@ -13,6 +15,8 @@
 	let hasNext = $state(false);
 	let loadingMore = $state(false);
 	let query = $state('');
+	let completedGoals = $state<CompletedGoal[]>([]);
+	let showGoalModal = $state(false);
 
 	async function loadHome() {
 		home = await apiGet<HomeData>('/home');
@@ -26,6 +30,11 @@
 	}
 
 	onMount(async () => {
+		if (goalNoticeState.pending.length) {
+			completedGoals = goalNoticeState.pending;
+			goalNoticeState.pending = [];
+			showGoalModal = true;
+		}
 		await Promise.all([loadHome(), loadEntries(1, false)]);
 	});
 
@@ -269,3 +278,14 @@
 		{/if}
 	</aside>
 </div>
+
+<Modal bind:open={showGoalModal} title="🎉 Goal complete!">
+	<div class="flex flex-col gap-2">
+		{#each completedGoals as goal (goal.type + goal.end_year)}
+			<p class="text-md">
+				You hit your goal of {goal.amount}
+				{goal.type}{goal.amount === 1 ? '' : 's'} in {goal.end_year}.
+			</p>
+		{/each}
+	</div>
+</Modal>
