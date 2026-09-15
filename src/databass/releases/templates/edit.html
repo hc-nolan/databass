@@ -39,13 +39,23 @@
         </div>
 
         <div>
-            <label for="genres" class="field-label">genres</label>
-            <input id="genres" name="genres" class="field" value="{% for g in release.genres %}{{ g.name }}{% if not loop.last %}, {% endif %}{% endfor %}">
+            <label class="field-label">genres</label>
+            <div class="chip-list" id="edit_genre_chips">
+              {% for g in release.genres %}
+              <span class="chip-seed" data-value="{{ g.name }}" hidden></span>
+              {% endfor %}
+            </div>
+            <input type="text" id="edit_genre_input" class="field" placeholder="+ add genre, press enter">
         </div>
 
         <div>
-            <label for="collab_artists" class="field-label">collab artists</label>
-            <input id="collab_artists" name="collab_artists" class="field" placeholder="also credit to these artists' discographies" value="{% for a in release.collab_artists %}{{ a.name }}{% if not loop.last %}, {% endif %}{% endfor %}">
+            <label class="field-label">collab artists</label>
+            <div class="chip-list" id="edit_collab_chips">
+              {% for a in release.collab_artists %}
+              <span class="chip-seed" data-value="{{ a.name }}" hidden></span>
+              {% endfor %}
+            </div>
+            <input type="text" id="edit_collab_input" class="field" placeholder="also credit to these artists' discographies">
         </div>
 
         <div class="popup-actions">

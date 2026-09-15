@@ -221,28 +221,26 @@ def edit(release_id):
 
         # genres
         try:
-            genres = edit_data["genres"]
-            genre_objs = []
-            if genres:
-                for g in genres.split(","):
-                    genre_objs.append(models.Genre.create_if_not_exists(g))
-                submit_data["genres"] = genre_objs
+            genre_names = [
+                g.strip() for g in request.form.getlist("genres") if g.strip()
+            ]
+            if genre_names:
+                submit_data["genres"] = [
+                    models.Genre.create_if_not_exists(g) for g in genre_names
+                ]
         except KeyError:
             pass
 
         # collab artists: additional artists whose discography should
         # include this release, alongside its primary artist
         try:
-            collab_artists = edit_data["collab_artists"]
-            collab_objs = []
-            for name in collab_artists.split(","):
-                name = name.strip()
-                if name:
-                    collab_id = models.Artist.create_if_not_exist(name)
-                    collab_objs.append(models.Artist.exists_by_id(collab_id))
-            # unlike genres, an empty submission here is meaningful: it's how
-            # a collab credit gets removed, so always write the (possibly
-            # empty) list rather than only when non-empty
+            collab_names = [
+                n.strip() for n in request.form.getlist("collab_artists") if n.strip()
+            ]
+            collab_objs = [
+                models.Artist.exists_by_id(models.Artist.create_if_not_exist(n))
+                for n in collab_names
+            ]
             submit_data["collab_artists"] = collab_objs
         except KeyError:
             pass

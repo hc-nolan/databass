@@ -40,6 +40,9 @@ function handleEditButton(editButton) {
             popup.innerHTML = html;
             document.body.appendChild(popup);
 
+            initChipField(popup, 'edit_genre_chips', 'edit_genre_input', 'genres');
+            initChipField(popup, 'edit_collab_chips', 'edit_collab_input', 'collab_artists');
+
             popup.querySelector('#edit_cancel').addEventListener('click', () => {
                 document.body.removeChild(popup);
             });
@@ -569,4 +572,46 @@ function editEntity(editButton, entityType) {
         })
 }
 
+function initChipField(root, containerId, inputId, fieldName) {
+  const container = root.querySelector('#' + containerId);
+  const input = root.querySelector('#' + inputId);
+  let values = Array.from(container.querySelectorAll('.chip-seed')).map(el => el.dataset.value);
 
+  function render() {
+    container.innerHTML = '';
+    if (values.length === 0) {
+      const empty = document.createElement('input');
+      empty.type = 'hidden';
+      empty.name = fieldName;
+      empty.value = '';
+      container.appendChild(empty);
+    }
+    values.forEach(name => {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'chip is-selected';
+      chip.textContent = name + ' x';
+      chip.addEventListener('click', () => {
+        values = values.filter(v => v !== name);
+        render();
+      });
+      container.appendChild(chip);
+      const hidden = document.createElement('input');
+      hidden.type = 'hidden';
+      hidden.name = fieldName;
+      hidden.value = name;
+      container.appendChild(hidden);
+    });
+  }
+  input.addEventListener('keydown', e => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const name = input.value.trim();
+    if (name && !values.includes(name)) {
+      values.push(name);
+      render();
+    }
+    input.value = '';
+  });
+  render();
+}

@@ -2,6 +2,7 @@ import pytest
 from databass import create_app
 from databass.db.base import app_db
 from databass.db.models import Artist, Label, Genre, Release
+from werkzeug.datastructures import MultiDict
 import datetime
 
 
@@ -190,9 +191,7 @@ class TestEdit:
             "databass.db.models.Artist.create_if_not_exist", return_value=2
         )
         mock_artist = mocker.MagicMock()
-        mocker.patch(
-            "databass.db.models.Artist.exists_by_id", return_value=mock_artist
-        )
+        mocker.patch("databass.db.models.Artist.exists_by_id", return_value=mock_artist)
 
         response = client.post(
             "/release/1/edit", data={"collab_artists": "Ghostface Killah"}
@@ -223,6 +222,83 @@ class TestEdit:
         assert response.status_code == 302
         submit_data = mock_construct.call_args[0][1]
         assert submit_data["collab_artists"] == []
+
+    def test_edit_post_collab_artist_name_with_comma_not_split(
+        self, client, mock_release_data, mocker
+    ):
+        """
+        Test that submitting multiple collab artists as repeated form fields
+        resolves each full name, even when a name itself contains a comma
+        (e.g. "Earth, Wind & Fire"), rather than splitting it into fragments
+        """
+        mock_construct = mocker.patch(
+            "databass.db.construct_item", return_value=mock_release_data
+        )
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        mocker.patch("databass.db.update")
+        mock_create = mocker.patch(
+            "databass.db.models.Artist.create_if_not_exist", return_value=2
+        )
+        mock_artist = mocker.MagicMock()
+        mocker.patch(
+            "databass.db.models.Artist.exists_by_id", return_value=mock_artist
+        )
+
+        response = client.post(
+            "/release/1/edit",
+            data=MultiDict(
+                [
+                    ("collab_artists", "Earth, Wind & Fire"),
+                    ("collab_artists", "Nile Rodgers"),
+                ]
+            ),
+        )
+
+        assert response.status_code == 302
+        mock_create.assert_any_call("Earth, Wind & Fire")
+        mock_create.assert_any_call("Nile Rodgers")
+        assert mock_create.call_count == 2
+        submit_data = mock_construct.call_args[0][1]
+        assert submit_data["collab_artists"] == [mock_artist, mock_artist]
+
+    def test_edit_post_genre_name_with_comma_not_split(
+        self, client, mock_release_data, mocker
+    ):
+        """
+        Test that submitting multiple genres as repeated form fields resolves
+        each full name, even when a name itself contains a comma, rather than
+        splitting it into fragments
+        """
+        mock_construct = mocker.patch(
+            "databass.db.construct_item", return_value=mock_release_data
+        )
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        mocker.patch("databass.db.update")
+        mock_genre = mocker.MagicMock()
+        mock_create_genre = mocker.patch(
+            "databass.db.models.Genre.create_if_not_exists", return_value=mock_genre
+        )
+
+        response = client.post(
+            "/release/1/edit",
+            data=MultiDict(
+                [
+                    ("genres", "Chill, Wave"),
+                    ("genres", "synthpop"),
+                ]
+            ),
+        )
+
+        assert response.status_code == 302
+        mock_create_genre.assert_any_call("Chill, Wave")
+        mock_create_genre.assert_any_call("synthpop")
+        assert mock_create_genre.call_count == 2
+        submit_data = mock_construct.call_args[0][1]
+        assert submit_data["genres"] == [mock_genre, mock_genre]
 
     def test_edit_post_failure_non_existing_release(self, client, mocker):
         """
