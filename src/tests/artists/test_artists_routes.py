@@ -71,7 +71,7 @@ class TestEditArtist:
         error page with a specific message instead of crashing.
         """
         mocker.patch(
-            "databass.artists.routes.Util.get_image",
+            "databass.artists.routes.image_api.get_image",
             side_effect=ValueError(
                 "ERROR: No supported image type found in URL: https://example.com/page"
             ),
@@ -91,7 +91,7 @@ class TestApiEditArtist:
     # Tests for PUT /api/artist/<id>
     def test_api_edit_unsupported_image_url_returns_400(self, client, mocker, existing_artist):
         mocker.patch(
-            "databass.artists.routes.Util.get_image",
+            "databass.artists.routes.image_api.get_image",
             side_effect=ValueError(
                 "ERROR: No supported image type found in URL: https://example.com/page"
             ),

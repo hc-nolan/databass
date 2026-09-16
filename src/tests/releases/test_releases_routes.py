@@ -324,7 +324,7 @@ class TestEdit:
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
         mocker.patch(
-            "databass.releases.routes.Util.get_image",
+            "databass.releases.routes.image_api.get_image",
             side_effect=ValueError(
                 "ERROR: No supported image type found in URL: https://example.com/page"
             ),
@@ -374,7 +374,7 @@ class TestApiEditRelease:
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
         mocker.patch(
-            "databass.releases.routes.Util.get_image",
+            "databass.releases.routes.image_api.get_image",
             side_effect=ValueError(
                 "ERROR: No supported image type found in URL: https://example.com/page"
             ),
