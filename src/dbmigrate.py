@@ -1,7 +1,7 @@
+import psycopg2
 from databass import create_app
 from databass.db import models
 from databass.db.operations import insert
-import psycopg2
 
 conn = psycopg2.connect(dbname="db2migrate")
 cur = conn.cursor()

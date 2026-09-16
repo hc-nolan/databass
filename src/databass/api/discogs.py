@@ -114,12 +114,11 @@ class Discogs:
             # e.g. "Future (4)" -> "Future"
             result_title = re.sub(DISAMBIG_PATTERN, "", result_title)
             if result_title == name:
-                format = result.get("format", [])
-                if "Blu-ray" in format:
+                result_format = result.get("format", [])
+                if "Blu-ray" in result_format:
                     continue
-                else:
-                    item_id = result.get("id")
-                    break
+                item_id = result.get("id")
+                break
 
         if item_id:
             print(f"ID for {item_type} {name}: {item_id}")
@@ -203,6 +202,24 @@ class Discogs:
             return None
 
     @staticmethod
+    def _get_image_url_by_item_id(item_id: Optional[str], endpoint_prefix: str) -> Optional[str]:
+        """
+        Shared by get_release_image_url/get_artist_image_url/get_label_image_url:
+        given an already-resolved Discogs item ID, fetches the item's detail
+        endpoint and returns its first square image URL, if any.
+        """
+        if not item_id:
+            print("No search results found.")
+            return None
+        endpoint = f"/{endpoint_prefix}/{item_id}"
+        try:
+            res = Discogs.request(endpoint)
+            img = Discogs.find_image(res)
+            return img if img else None
+        except requests.exceptions.RequestException:
+            return None
+
+    @staticmethod
     def get_release_image_url(name: str, artist: str) -> Optional[str]:
         """
         Retrieves the URL of the image associated with the specified Discogs release.
@@ -224,18 +241,7 @@ class Discogs:
             return None
 
         release_id = Discogs.get_item_id(name=name, artist=artist, item_type="release")
-        if release_id:
-            print("Got release ID. Checking for images...")
-            endpoint = f"/releases/{release_id}"
-            try:
-                res = Discogs.request(endpoint)
-                img = Discogs.find_image(res)
-                return img if img else None
-            except requests.exceptions.RequestException:
-                return None
-        else:
-            print("No search results found.")
-            return None
+        return Discogs._get_image_url_by_item_id(release_id, "releases")
 
     @staticmethod
     def get_artist_image_url(name: str) -> Optional[str]:
@@ -252,16 +258,7 @@ class Discogs:
         if not name or not isinstance(name, str):
             return None
         artist_id = Discogs.get_item_id(name=name, item_type="artist")
-        if artist_id:
-            endpoint = f"/artists/{artist_id}"
-            try:
-                res = Discogs.request(endpoint)
-                return Discogs.find_image(res)
-            except requests.exceptions.RequestException:
-                return None
-        else:
-            print("No search results found.")
-            return None
+        return Discogs._get_image_url_by_item_id(artist_id, "artists")
 
     @staticmethod
     def get_label_image_url(name: str) -> Optional[str]:
@@ -278,13 +275,4 @@ class Discogs:
         if not name or not isinstance(name, str):
             return None
         label_id = Discogs.get_item_id(name=name, item_type="label")
-        if label_id:
-            endpoint = f"/labels/{label_id}"
-            try:
-                res = Discogs.request(endpoint)
-                return Discogs.find_image(res)
-            except requests.exceptions.RequestException:
-                return None
-        else:
-            print("No search results found.")
-            return None
+        return Discogs._get_image_url_by_item_id(label_id, "labels")

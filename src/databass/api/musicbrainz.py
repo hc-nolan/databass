@@ -1,6 +1,6 @@
 from os import getenv
-from dateutil import parser as dateparser
 from typing import Optional, Dict, Any
+from dateutil import parser as dateparser
 from dotenv import load_dotenv
 import musicbrainzngs as mbz
 import musicbrainzngs.musicbrainz

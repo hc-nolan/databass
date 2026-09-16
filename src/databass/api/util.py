@@ -1,11 +1,11 @@
-import requests
 import datetime
 import signal
 from os import getenv
 from pathlib import Path
 from typing import Optional
-from dotenv import load_dotenv
 from uuid import uuid4
+import requests
+from dotenv import load_dotenv
 
 load_dotenv()
 VERSION = getenv("VERSION")
@@ -107,18 +107,18 @@ class Util:
             return ".jpg"
         if bytestr.startswith(PNG_HEADER):
             return ".png"
-        else:
-            raise ValueError(
-                f"Unsupported file type (signature: {bytestr[:8].hex()}). Supported types: jpg, png"
-            )
+        raise ValueError(
+            f"Unsupported file type (signature: {bytestr[:8].hex()}). Supported types: jpg, png"
+        )
 
     @staticmethod
-    def get_image_from_url(url: str, entity_type: str, entity_id: int | int):
+    def get_image_from_url(url: str, entity_type: str):
         response = requests.get(
             url,
             headers={
                 "User-Agent": f"databass/{VERSION} (https://github.com/chunned/databass)"
             },
+            timeout=30,
         )
         if response:
             ext = Util.get_image_type_from_url(url)
@@ -129,9 +129,9 @@ class Util:
 
     @staticmethod
     def get_caa_image(mbid: str) -> dict:
+        """Get image from CoverArtArchive"""
         from .musicbrainz import MusicBrainz
 
-        """Get image from CoverArtArchive"""
         print(f"Attempting to fetch image from CoverArtArchive: {mbid}")
 
         timeout_duration = 5
@@ -196,9 +196,7 @@ class Util:
         if entity_type not in VALID_TYPES:
             raise ValueError(f"Unexpected entity_type: {entity_type}")
         if url:
-            return Util.get_image_from_url(
-                entity_id=entity_id, entity_type=entity_type, url=url
-            )
+            return Util.get_image_from_url(entity_type=entity_type, url=url)
         Path(f"{IMG_BASE_PATH}/{entity_type}").mkdir(parents=True, exist_ok=True)
 
         img = img_type = None
@@ -237,15 +235,12 @@ class Util:
         if img is not None and img_type is not None:
             return Util.write_image(
                 entity_type=entity_type,
-                entity_id=entity_id,
                 img_bytes=img,
                 img_type=img_type,
             )
 
     @staticmethod
-    def write_image(
-        entity_id: int, entity_type: str, img_type: str, img_bytes: bytes
-    ) -> str:
+    def write_image(entity_type: str, img_type: str, img_bytes: bytes) -> str:
         file_name = str(uuid4()) + img_type
         file_path = IMG_BASE_PATH + "/" + entity_type + "/" + file_name
         with open(file_path, "wb") as img_file:
