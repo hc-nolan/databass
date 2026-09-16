@@ -1,8 +1,6 @@
 # Overview
 
-### [Screenshots](./screenshots)
-
-Databass is a music diary app. It's similar to RateYourMusic but meant for one user only. Data about releases, artists, and labels is retrieved mainly from MusicBrainz, but also from Discogs. 
+Databass is a music diary app. It's similar to RateYourMusic but meant for one user only. Data about releases, artists, and labels is retrieved mainly from MusicBrainz, but also from Discogs.
 
 The app is still in early stages, so expect breaking changes in new releases. Currently development is focused solely on the desktop browser experience.
 
@@ -18,7 +16,7 @@ There are a few things to note before you use it:
 - Album art is currently best-effort; an attempt will be made to grab it from CoverArtArchive and Discogs, but you have no control over what art is picked unless you edit the release after the fact
 
 # Usage
-Clone the repository, or just download the `docker-compose.yml` and `.env.example` files: 
+Clone the repository, or just download the `docker-compose.yml` and `.env.example` files:
 ```shell
 wget https://raw.githubusercontent.com/chunned/databass/main/docker-compose.yml
 wget https://raw.githubusercontent.com/chunned/databass/main/.env.example
@@ -30,7 +28,7 @@ Rename `.env.example` to `.env` and fill out the required values:
 - DISCOGS_KEY and DISCOGS_SECRET
   - Create an account at [Discogs.com](https://discogs.com)
   - Create a [new application](https://www.discogs.com/applications/edit)
-  - Copy and paste`Consumer Key` -> `DISCOGS_KEY` 
+  - Copy and paste`Consumer Key` -> `DISCOGS_KEY`
   - Copy and paste`Consumer Secret` -> `DISCOGS_SECRET`
 
 Then, run `docker compose up --build -d` and visit the application at `localhost:<port>`
