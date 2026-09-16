@@ -33,7 +33,7 @@ def insert(item: app_db.Model) -> int:
         ) from err
     except Exception as err:
         app_db.session.rollback()
-        raise Exception(f"Unexpected error: {err}")
+        raise RuntimeError(f"Unexpected error: {err}") from err
 
 
 def update(item: app_db.Model) -> None:
@@ -63,7 +63,7 @@ def update(item: app_db.Model) -> None:
         ) from err
     except Exception as err:
         app_db.session.rollback()
-        raise Exception(f"Unexpected error: {err}")
+        raise RuntimeError(f"Unexpected error: {err}") from err
 
 
 def delete(item_type: str, item_id: str) -> None:

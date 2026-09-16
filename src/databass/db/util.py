@@ -1,13 +1,10 @@
 from typing import Type
-from sqlalchemy.orm import query as sql_query
-from .operations import insert, construct_item
-
-# from .models import *
-# above imports all of the below
 from sqlalchemy import extract, Integer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine.row import Row
-from .models import Artist, Release, Label, MusicBrainzEntity, Base, Goal, Genre, Review
+from sqlalchemy.orm import query as sql_query
+from .operations import insert, construct_item
+from .models import Artist, Release, Label, MusicBrainzEntity, Base, Goal, Genre
 
 
 def get_valid_models():
@@ -31,8 +28,8 @@ def apply_comparison_filter(
         raise NameError(f"No attribute '{key}' found in model {model}")
     try:
         val = int(value)
-    except TypeError:
-        raise TypeError(f"Value must be an integer, got {type(value)}: {value}")
+    except TypeError as exc:
+        raise TypeError(f"Value must be an integer, got {type(value)}: {value}") from exc
 
     if operator not in ["<", "=", ">"]:
         raise ValueError(f"Unrecognized operator value for year_comparison: {operator}")
@@ -117,20 +114,14 @@ def ensure_db_placeholders():
 
     This function ensures these entries exist.
     """
-    label = Label()
-    label.id = 0
-    label.name = "Unknown"
-    try:
-        insert(label)
-    except IntegrityError:
-        pass
-    artist = Artist()
-    artist.id = 0
-    artist.name = "Unknown"
-    try:
-        insert(artist)
-    except IntegrityError:
-        pass
+    for model in (Label, Artist):
+        placeholder = model()
+        placeholder.id = 0
+        placeholder.name = "Unknown"
+        try:
+            insert(placeholder)
+        except IntegrityError:
+            pass
 
 
 def handle_submit_data(submit_data: dict) -> list[Goal]:

@@ -6,5 +6,5 @@ MODELS = {
     "label": Label,
     "goal": Goal,
     "genre": Genre,
-    "review": Review
+    "review": Review,
 }
