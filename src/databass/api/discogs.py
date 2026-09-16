@@ -3,7 +3,7 @@ Implements Discogs API-related functions via Discogs class methods
 """
 
 from os import getenv
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Literal
 from urllib.parse import urljoin, urlencode
 import time
 import re
@@ -20,6 +20,8 @@ DIMENSIONS_PATTERN = r"/h:\d+/w:\d+/"
 HEIGHT_PATTERN = r"/h:(\d+)/.*"
 WIDTH_PATTERN = r".*/w:(\d+)/.*"
 DISAMBIG_PATTERN = r"\s*\(\d+\)\s*$"
+
+valid_entity_types = Literal["release", "artist", "label"]
 
 
 class Discogs:
@@ -202,7 +204,9 @@ class Discogs:
             return None
 
     @staticmethod
-    def _get_image_url_by_item_id(item_id: Optional[str], endpoint_prefix: str) -> Optional[str]:
+    def _get_image_url_by_item_id(
+        item_id: Optional[str], endpoint_prefix: str
+    ) -> Optional[str]:
         """
         Shared by get_release_image_url/get_artist_image_url/get_label_image_url:
         given an already-resolved Discogs item ID, fetches the item's detail
@@ -276,3 +280,27 @@ class Discogs:
             return None
         label_id = Discogs.get_item_id(name=name, item_type="label")
         return Discogs._get_image_url_by_item_id(label_id, "labels")
+
+    @staticmethod
+    def resolve_image_url(
+        entity_type: valid_entity_types,
+        release_name: Optional[str],
+        artist_name: Optional[str],
+        label_name: Optional[str],
+    ):
+        log_str = f"Resolving image URL from Discogs: {entity_type} - "
+        match entity_type:
+            case "release":
+                print(log_str, release_name)
+                img_url = Discogs.get_release_image_url(
+                    name=release_name, artist=artist_name
+                )
+            case "artist":
+                print(log_str, artist_name)
+                img_url = Discogs.get_artist_image_url(name=artist_name)
+            case "label":
+                print(log_str, label_name)
+                img_url = Discogs.get_label_image_url(name=label_name)
+            case _:
+                img_url = {}
+        return img_url

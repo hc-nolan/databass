@@ -35,30 +35,29 @@ def get_caa_image(mbid: str) -> dict:
         img_type = Util.get_image_type_from_bytes(img)
     else:
         raise ValueError(
-            "No image returned by CoverArtArchive, or an error was encountered when fetching the image."
+            "No image returned by CoverArtArchive, or an error was encountered"
+            " when fetching the image."
         )
     return {"image": img, "type": img_type}
 
 
+valid_entity_types = Literal["release", "artist", "label"]
+
+
 def get_discogs_image(
-    entity_type: str,
+    entity_type: valid_entity_types,
     release_name: Optional[str],
     artist_name: Optional[str],
     label_name: Optional[str],
 ) -> dict:
-    match entity_type:
-        case "release":
-            img_url = Discogs.get_release_image_url(
-                name=release_name, artist=artist_name
-            )
-        case "artist":
-            img_url = Discogs.get_artist_image_url(name=artist_name)
-        case "label":
-            img_url = Discogs.get_label_image_url(name=label_name)
-        case _:
-            return {}
+    """Fetch an image from Discogs"""
+    img_url = Discogs.resolve_image_url(
+        entity_type, release_name, artist_name, label_name
+    )
+    print(f"Image URL: {img_url}")
     if img_url is None:
         return {}
+    print("Attempting to fetch...")
     response = requests.get(
         img_url,
         headers={
@@ -69,10 +68,14 @@ def get_discogs_image(
     )
     img = response.content
     img_type = Util.get_image_type_from_bytes(img)
+    print("Discogs image fetch successful")
     return {"image": img, "type": img_type}
 
 
-def write_image(entity_type: str, img_type: str, img_bytes: bytes) -> str:
+def write_image(
+    entity_type: valid_entity_types, img_type: str, img_bytes: bytes
+) -> str:
+    """Writes `img_bytes` to `entity_type`'s image directory as an `img_type` file"""
     file_name = str(uuid4()) + img_type
     file_path = IMG_BASE_PATH + "/" + entity_type + "/" + file_name
     with open(file_path, "wb") as img_file:
@@ -82,7 +85,7 @@ def write_image(entity_type: str, img_type: str, img_bytes: bytes) -> str:
 
 
 def fetch_image(
-    entity_type: Literal["release", "artist", "label"],
+    entity_type: valid_entity_types,
     mbid: Optional[str],
     release_name: Optional[str],
     artist_name: Optional[str],
