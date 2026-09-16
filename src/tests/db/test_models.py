@@ -814,7 +814,7 @@ class TestReleaseAddedPerDayThisYear:
         mock_listens = mocker.patch("databass.db.models.Release.added_this_year")
         mock_listens.return_value = listens
 
-        mock_date = mocker.patch("databass.db.models.date")
+        mock_date = mocker.patch("databass.db.models.base.date")
         mock_date.today.return_value.timetuple.return_value.tm_yday = days
 
         result = Release.added_per_day_this_year()
@@ -823,7 +823,7 @@ class TestReleaseAddedPerDayThisYear:
     def test_added_per_day_this_year_handles_zero_days(self, mocker):
         """Test that added_per_day_this_year returns 0.0 when days_this_year is 0"""
         mock_listens = mocker.patch("databass.db.models.Release.added_this_year")
-        mock_date = mocker.patch("databass.db.models.date")
+        mock_date = mocker.patch("databass.db.models.base.date")
         mock_date.today.return_value.timetuple.return_value.tm_yday = 0
 
         result = Release.added_per_day_this_year()
@@ -836,7 +836,7 @@ class TestReleaseAddedPerDayThisYear:
         mock_listens = mocker.patch("databass.db.models.Release.added_this_year")
         mock_listens.return_value = 100
 
-        mock_date = mocker.patch("databass.db.models.date")
+        mock_date = mocker.patch("databass.db.models.base.date")
         mock_date.today.return_value.timetuple.return_value.tm_yday = 33
         # Should result in 3.0303... before rounding
 
@@ -847,7 +847,7 @@ class TestReleaseAddedPerDayThisYear:
     def test_added_per_day_this_year_uses_correct_year_day(self, mocker):
         """Test that added_per_day_this_year uses the correct day of year"""
         mock_listens = mocker.patch("databass.db.models.Release.added_this_year")
-        mock_date = mocker.patch("databass.db.models.date")
+        mock_date = mocker.patch("databass.db.models.base.date")
         mock_timetuple = mocker.Mock()
         mock_timetuple.tm_yday = 100
 
@@ -918,7 +918,7 @@ class TestReleaseDynamicSearch:
     def test_dynamic_search_comparison_filters(self, mocker):
         """Test that dynamic_search correctly handles comparison filters"""
         mocker.patch("databass.db.base.app_db.session.query")
-        mock_apply = mocker.patch("databass.db.models.apply_comparison_filter")
+        mock_apply = mocker.patch("databass.db.models.catalog.apply_comparison_filter")
 
         Release.dynamic_search(
             {
@@ -1029,8 +1029,7 @@ class TestReleaseCreateNew:
 
     def test_create_new_returns_integer(self, mocker):
         """Test that create_new returns an integer ID"""
-        mock_insert = mocker.patch("databass.db.models.insert")
-        mocker.patch("databass.db.models.update")
+        mock_insert = mocker.patch("databass.db.models.catalog.insert")
         mock_get_image = mocker.patch("databass.api.image.get_image")
 
         mock_insert.return_value = 42
@@ -1056,8 +1055,7 @@ class TestReleaseCreateNew:
 
     def test_create_new_constructs_release_correctly(self, mocker):
         """Test that create_new constructs a Release with the given data before inserting"""
-        mock_insert = mocker.patch("databass.db.models.insert")
-        mocker.patch("databass.db.models.update")
+        mock_insert = mocker.patch("databass.db.models.catalog.insert")
         mocker.patch("databass.api.image.get_image")
 
         test_data = {
@@ -1077,8 +1075,7 @@ class TestReleaseCreateNew:
 
     def test_create_new_missing_optional_fields(self, mocker):
         """Test that create_new doesn't raise when optional fields are absent"""
-        mock_insert = mocker.patch("databass.db.models.insert")
-        mocker.patch("databass.db.models.update")
+        mock_insert = mocker.patch("databass.db.models.catalog.insert")
         mock_get_image = mocker.patch("databass.api.image.get_image")
         mock_insert.return_value = 1
 
@@ -1559,7 +1556,7 @@ class TestGoalCheckGoals:
         untouched_goal = Goal(type="release", amount=10)
 
         mocker.patch.object(Goal, "get_incomplete", return_value=[completed_goal, untouched_goal])
-        mocker.patch("databass.db.models.update")
+        mocker.patch("databass.db.models.goal.update")
 
         result = Goal.check_goals()
 
@@ -1575,7 +1572,7 @@ class TestGoalCheckGoals:
         )
 
         mocker.patch.object(Goal, "get_incomplete", return_value=[untouched_goal])
-        mocker.patch("databass.db.models.update")
+        mocker.patch("databass.db.models.goal.update")
 
         assert Goal.check_goals() == []
 
@@ -1591,7 +1588,7 @@ class TestGenreCreateGenres:
 
             # Mock insert to return a predictable ID
             mock_insert = mocker.patch(
-                "databass.db.models.insert", side_effect=[1, 2, 3]
+                "databass.db.models.genre.insert", side_effect=[1, 2, 3]
             )
 
             test_genres = "rock,jazz,electronic"
@@ -1617,7 +1614,7 @@ class TestGenreCreateGenres:
         """Test that create_genres correctly splits the input string into individual genres"""
         with app.app_context():
             mocker.patch.object(Genre, "exists_by_name", return_value=False)
-            mocker.patch("databass.db.models.insert")
+            mocker.patch("databass.db.models.genre.insert")
 
             result = Genre.create_genres(genres_string)
 
@@ -1627,7 +1624,7 @@ class TestGenreCreateGenres:
         """Test that create_genres constructs Genre objects with correct parameters"""
         with app.app_context():
             mocker.patch.object(Genre, "exists_by_name", return_value=False)
-            mocker.patch("databass.db.models.insert")
+            mocker.patch("databass.db.models.genre.insert")
 
             test_genre = "rock"
             result = Genre.create_genres(test_genre)
@@ -1640,7 +1637,7 @@ class TestGenreCreateGenres:
         """Test that create_genres inserts the constructed Genre objects into the database"""
         with app.app_context():
             mocker.patch.object(Genre, "exists_by_name", return_value=False)
-            mock_insert = mocker.patch("databass.db.models.insert")
+            mock_insert = mocker.patch("databass.db.models.genre.insert")
 
             result = Genre.create_genres("rock")
 
@@ -1650,7 +1647,7 @@ class TestGenreCreateGenres:
         """Test that create_genres handles genres with whitespace correctly"""
         with app.app_context():
             mocker.patch.object(Genre, "exists_by_name", return_value=False)
-            mocker.patch("databass.db.models.insert")
+            mocker.patch("databass.db.models.genre.insert")
 
             test_genres = "rock , jazz , electronic"
             result = Genre.create_genres(test_genres)
