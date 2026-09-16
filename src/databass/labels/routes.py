@@ -20,7 +20,7 @@ def _apply_label_edit(label_data: Label, edit_data: dict) -> Label:
 
     image = edit_data.get("image")
     if image is not None:
-        if "http" and "://" in image:
+        if "://" in image:
             new_image = Util.get_image(
                 entity_type="label", entity_id=label_data.id, url=image
             )
@@ -76,13 +76,6 @@ def edit_label(label_data):
         return redirect(f"/label/{label_data.id}", code=302)
 
 
-# TODO: implement edit_label
-# @label_bp.route('/label/<string:label_id>', methods=['GET', 'POST'])
-# def edit_label(label_id):
-#     if request.method == 'GET':
-#         pass
-#     elif request.method == 'POST':
-#         pass
 # TODO: implement delete_label
 
 

@@ -20,7 +20,7 @@ def _apply_artist_edit(artist_data: Artist, edit_data: dict) -> Artist:
 
     image_url = edit_data.get("image")
     if image_url is not None:
-        if "http" and "://" in image_url:
+        if "://" in image_url:
             Util.get_image(
                 entity_type="artist", entity_id=artist_data.id, url=image_url
             )
