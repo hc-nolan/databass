@@ -3,14 +3,14 @@ from sqlalchemy.exc import IntegrityError
 from ..db.models import Label
 from ..db import update
 from ..api.util import Util
+from ..decorators import load_or_404
 from ..detail import build_label_detail
 from ..errors.util import friendly_message, integrity_error_message
 
 label_bp = Blueprint("label_bp", __name__, template_folder="templates")
 
 
-def _apply_label_edit(label_id, edit_data: dict) -> Label:
-    label_data = Label.exists_by_id(label_id)
+def _apply_label_edit(label_data: Label, edit_data: dict) -> Label:
     start = edit_data.get("start")
     if start:
         label_data.begin = start
@@ -19,9 +19,11 @@ def _apply_label_edit(label_id, edit_data: dict) -> Label:
         label_data.end = end
 
     image = edit_data.get("image")
-    if image:
+    if image is not None:
         if "http" and "://" in image:
-            new_image = Util.get_image(entity_type="label", entity_id=label_id, url=image)
+            new_image = Util.get_image(
+                entity_type="label", entity_id=label_data.id, url=image
+            )
             label_data.image = new_image
         else:
             print("Image not a URL. Skipping.")
@@ -38,11 +40,11 @@ def _apply_label_edit(label_id, edit_data: dict) -> Label:
 def label(label_id):
     if label_id == 0:
         return redirect("/")
-    label_data = Label.exists_by_id(label_id)
-    if not label_data:
-        error = f"No label with ID {label_id} found."
-        flash(error)
-        return redirect("/error", code=302)
+    return _label_detail(label_id=label_id)
+
+
+@load_or_404(Label, "label_id", inject_as="label_data")
+def _label_detail(label_data):
     return render_template(
         "detail.html", active_page="browse", data=build_label_detail(label_data)
     )
@@ -54,14 +56,8 @@ def labels():
 
 
 @label_bp.route("/label/<string:label_id>/edit", methods=["GET", "POST"])
-def edit_label(label_id):
-    # Check if label exists
-    label_data = Label.exists_by_id(int(label_id))
-    if not label_data:
-        error = f"No label with id {label_id} found."
-        flash(error)
-        return redirect("/error", code=302)
-
+@load_or_404(Label, "label_id", inject_as="label_data")
+def edit_label(label_data):
     if request.method == "GET":
         countries = Label.get_distinct_column_values("country")
         countries = sorted([c for c in countries if c is not None])
@@ -70,14 +66,14 @@ def edit_label(label_id):
     elif request.method == "POST":
         edit_data = request.form.to_dict()
         try:
-            _apply_label_edit(label_id, edit_data)
+            _apply_label_edit(label_data, edit_data)
         except IntegrityError as err:
             flash(integrity_error_message(err))
             return redirect("/error", code=302)
         except Exception as err:
             flash(friendly_message(err))
             return redirect("/error", code=302)
-        return redirect("/", 302)
+        return redirect(f"/label/{label_data.id}", code=302)
 
 
 # TODO: implement edit_label
@@ -91,18 +87,14 @@ def edit_label(label_id):
 
 
 @label_bp.route("/api/label/<int:label_id>", methods=["GET"])
-def api_label(label_id):
-    label_data = Label.exists_by_id(label_id)
-    if not label_data:
-        return jsonify({"error": f"No label with id {label_id} found."}), 404
+@load_or_404(Label, "label_id", inject_as="label_data")
+def api_label(label_data):
     return jsonify(build_label_detail(label_data))
 
 
 @label_bp.route("/api/label/<int:label_id>/edit", methods=["GET"])
-def api_edit_label_get(label_id):
-    label_data = Label.exists_by_id(label_id)
-    if not label_data:
-        return jsonify({"error": f"No label with id {label_id} found."}), 404
+@load_or_404(Label, "label_id", inject_as="label_data")
+def api_edit_label_get(label_data):
     countries = Label.get_distinct_column_values("country")
     countries = sorted([c for c in countries if c is not None])
     return jsonify(
@@ -119,14 +111,13 @@ def api_edit_label_get(label_id):
 
 
 @label_bp.route("/api/label/<int:label_id>", methods=["PUT"])
-def api_edit_label(label_id):
-    if not Label.exists_by_id(label_id):
-        return jsonify({"error": f"No label with id {label_id} found."}), 404
+@load_or_404(Label, "label_id", inject_as="label_data")
+def api_edit_label(label_data):
     edit_data = request.get_json() or {}
     try:
-        _apply_label_edit(label_id, edit_data)
+        _apply_label_edit(label_data, edit_data)
     except IntegrityError as err:
         return jsonify({"error": integrity_error_message(err)}), 400
     except Exception as err:
         return jsonify({"error": friendly_message(err)}), 400
-    return jsonify(build_label_detail(Label.exists_by_id(label_id)))
+    return jsonify(build_label_detail(label_data))

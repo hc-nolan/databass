@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from .. import db
 from ..db import models
 from ..api import Util
+from ..decorators import load_or_404
 from ..detail import build_release_detail
 from ..errors.util import friendly_message, integrity_error_message
 
@@ -33,7 +34,7 @@ def _release_edit_data(release_data: models.Release) -> dict:
     }
 
 
-def _apply_release_edit(release_id: str, edit_data: dict) -> models.Release:
+def _apply_release_edit(release_data: models.Release, edit_data: dict) -> models.Release:
     """Shared edit logic for the form-encoded and JSON edit endpoints."""
     submit_data = {}
 
@@ -41,7 +42,7 @@ def _apply_release_edit(release_id: str, edit_data: dict) -> models.Release:
     if image:
         if "http" and "://" in image:
             new_image = Util.get_image(
-                entity_type="release", entity_id=release_id, url=image
+                entity_type="release", entity_id=release_data.id, url=image
             )
             submit_data["image"] = new_image
         else:
@@ -92,57 +93,42 @@ def _apply_release_edit(release_id: str, edit_data: dict) -> models.Release:
 
     updated_release = db.construct_item("release", submit_data)
     # construct_item() will produce a unique ID primary key, so we need to set it to the original one for update() to work
-    updated_release.id = release_id
-    # grab the other release so we can inject the data that doesn't change
-    old_release = models.Release.exists_by_id(release_id)
-    updated_release.artist_id = old_release.artist_id
-    updated_release.label_id = old_release.label_id
-    updated_release.runtime = old_release.runtime
-    updated_release.track_count = old_release.track_count
+    updated_release.id = release_data.id
+    # carry over the fields that don't change from the release we already loaded
+    updated_release.artist_id = release_data.artist_id
+    updated_release.label_id = release_data.label_id
+    updated_release.runtime = release_data.runtime
+    updated_release.track_count = release_data.track_count
     db.update(updated_release)
     return updated_release
 
 
 @release_bp.route("/release/<string:release_id>", methods=["GET"])
-def release(release_id):
+@load_or_404(models.Release, "release_id", inject_as="release_data")
+def release(release_data):
     # Displays all info related to a particular release
-    release_data = models.Release.exists_by_id(release_id)
-    if not release_data:
-        error = f"No release with id {release_id} found."
-        flash(error)
-        return redirect("/error", code=302)
     return render_template(
         "detail.html", active_page="browse", data=build_release_detail(release_data)
     )
 
 
 @release_bp.route("/release/<string:release_id>/relisten", methods=["POST"])
-def relisten(release_id):
+@load_or_404(models.Release, "release_id", inject_as="release_data")
+def relisten(release_data):
     # Logs a new listen of an existing release: bumps the listen date and
     # appends a diary entry so re-listens read as history, not an overwrite.
-    release_data = models.Release.exists_by_id(int(release_id))
-    if not release_data:
-        error = f"No release with id {release_id} found."
-        flash(error)
-        return redirect("/error", code=302)
     release_data.listen_date = datetime.now()
     db.update(release_data)
     new_review = db.construct_item(
-        "review", {"release_id": int(release_id), "text": "Logged another listen."}
+        "review", {"release_id": release_data.id, "text": "Logged another listen."}
     )
     db.insert(new_review)
-    return redirect(f"/release/{release_id}", code=302)
+    return redirect(f"/release/{release_data.id}", code=302)
 
 
 @release_bp.route("/release/<string:release_id>/edit", methods=["GET", "POST"])
-def edit(release_id):
-    # Check if release exists
-    release_data = models.Release.exists_by_id(int(release_id))
-    if not release_data:
-        error = f"No release with id {release_id} found."
-        flash(error)
-        return redirect("/error", code=302)
-
+@load_or_404(models.Release, "release_id", inject_as="release_data")
+def edit(release_data):
     if request.method == "GET":
         try:
             release_image = release_data.image[1:]
@@ -171,7 +157,7 @@ def edit(release_id):
                     # If image is a URL, download it
                     try:
                         new_image = Util.get_image(
-                            entity_type="release", entity_id=release_id, url=image
+                            entity_type="release", entity_id=release_data.id, url=image
                         )
                         submit_data["image"] = new_image
                     except Exception as err:
@@ -194,8 +180,6 @@ def edit(release_id):
         try:
             listen_date = edit_data["listen_date"]
             if listen_date:
-                from datetime import datetime
-
                 submit_data["listen_date"] = datetime.strptime(listen_date, "%Y-%m-%d")
         except KeyError:
             pass
@@ -253,21 +237,12 @@ def edit(release_id):
 
         updated_release = db.construct_item("release", submit_data)
         # construct_item() will produce a unique ID primary key, so we need to set it to the original one for update() to work
-        try:
-            updated_release.id = release_id
-            # grab the other release so we can inject the data that doesn't change
-            old_release = models.Release.exists_by_id(release_id)
-            updated_release.artist_id = old_release.artist_id
-            updated_release.label_id = old_release.label_id
-            updated_release.runtime = old_release.runtime
-            updated_release.track_count = old_release.track_count
-
-        except KeyError:
-            error = (
-                "Edit data missing ID, unable to update an existing entry without ID."
-            )
-            flash(error)
-            return redirect("/error", code=302)
+        updated_release.id = release_data.id
+        # carry over the fields that don't change from the release we already loaded
+        updated_release.artist_id = release_data.artist_id
+        updated_release.label_id = release_data.label_id
+        updated_release.runtime = release_data.runtime
+        updated_release.track_count = release_data.track_count
         try:
             db.update(updated_release)
         except IntegrityError as err:
@@ -299,12 +274,8 @@ def delete():
 
 
 @release_bp.route("/release/<string:release_id>/add_review", methods=["POST"])
-def add_review(release_id):
-    # Make sure release exists before doing anything
-    if not models.Release.exists_by_id(int(release_id)):
-        error = f"No release with ID {release_id} found"
-        flash(error)
-        return redirect("/error", code=302)
+@load_or_404(models.Release, "release_id", inject_as="release_data")
+def add_review(release_data):
     # Ensure request has required data
     review_data = request.form.to_dict()
     if "text" not in review_data.keys():
@@ -319,12 +290,8 @@ def add_review(release_id):
 
 
 @release_bp.route("/release/<string:release_id>/edit_review", methods=["POST"])
-def edit_review(release_id):
-    # Make sure release exists before doing anything
-    if not models.Release.exists_by_id(int(release_id)):
-        error = f"No release with ID {release_id} found"
-        flash(error)
-        return redirect("/error", code=302)
+@load_or_404(models.Release, "release_id", inject_as="release_data")
+def edit_review(release_data):
     # Ensure request has required data
     review_data = request.form.to_dict()
     if "id" not in review_data.keys() or "text" not in review_data.keys():
@@ -334,8 +301,8 @@ def edit_review(release_id):
 
     # Edit the review
     review = models.Review.exists_by_id(review_data["id"])
-    if not review or review.release_id != int(release_id):
-        error = f"No review with ID {review_data['id']} found for release {release_id}"
+    if not review or review.release_id != release_data.id:
+        error = f"No review with ID {review_data['id']} found for release {release_data.id}"
         flash(error)
         return redirect("/error", code=302)
     review.text = review_data["text"]
@@ -350,77 +317,69 @@ def releases():
 
 
 @release_bp.route("/api/release/<int:release_id>", methods=["GET"])
-def api_release(release_id):
-    release_data = models.Release.exists_by_id(release_id)
-    if not release_data:
-        return jsonify({"error": f"No release with id {release_id} found."}), 404
+@load_or_404(models.Release, "release_id", inject_as="release_data")
+def api_release(release_data):
     return jsonify(build_release_detail(release_data))
 
 
 @release_bp.route("/api/release/<int:release_id>/relisten", methods=["POST"])
-def api_relisten(release_id):
-    release_data = models.Release.exists_by_id(release_id)
-    if not release_data:
-        return jsonify({"error": f"No release with id {release_id} found."}), 404
+@load_or_404(models.Release, "release_id", inject_as="release_data")
+def api_relisten(release_data):
     release_data.listen_date = datetime.now()
     db.update(release_data)
     new_review = db.construct_item(
-        "review", {"release_id": release_id, "text": "Logged another listen."}
+        "review", {"release_id": release_data.id, "text": "Logged another listen."}
     )
     db.insert(new_review)
-    return jsonify(build_release_detail(models.Release.exists_by_id(release_id)))
+    return jsonify(build_release_detail(release_data))
 
 
 @release_bp.route("/api/release/<int:release_id>/edit", methods=["GET"])
-def api_edit_release_get(release_id):
-    release_data = models.Release.exists_by_id(release_id)
-    if not release_data:
-        return jsonify({"error": f"No release with id {release_id} found."}), 404
+@load_or_404(models.Release, "release_id", inject_as="release_data")
+def api_edit_release_get(release_data):
     return jsonify(_release_edit_data(release_data))
 
 
 @release_bp.route("/api/release/<int:release_id>", methods=["PUT"])
-def api_edit_release(release_id):
-    release_data = models.Release.exists_by_id(release_id)
-    if not release_data:
-        return jsonify({"error": f"No release with id {release_id} found."}), 404
+@load_or_404(models.Release, "release_id", inject_as="release_data")
+def api_edit_release(release_data):
     edit_data = request.get_json() or {}
     try:
-        _apply_release_edit(release_id, edit_data)
+        updated_release = _apply_release_edit(release_data, edit_data)
     except Exception as e:
         return jsonify({"error": friendly_message(e)}), 400
-    return jsonify(build_release_detail(models.Release.exists_by_id(release_id)))
+    return jsonify(build_release_detail(updated_release))
 
 
 @release_bp.route("/api/release/<int:release_id>/reviews", methods=["POST"])
-def api_add_review(release_id):
-    if not models.Release.exists_by_id(release_id):
-        return jsonify({"error": f"No release with ID {release_id} found"}), 404
+@load_or_404(models.Release, "release_id", inject_as="release_data")
+def api_add_review(release_data):
     review_data = request.get_json() or {}
     if "text" not in review_data:
         return jsonify({"error": "Request missing required field: text"}), 400
     new_review = db.construct_item(
-        "review", {"release_id": release_id, "text": review_data["text"]}
+        "review", {"release_id": release_data.id, "text": review_data["text"]}
     )
     db.insert(new_review)
-    return jsonify(build_release_detail(models.Release.exists_by_id(release_id))), 201
+    return jsonify(build_release_detail(release_data)), 201
 
 
 @release_bp.route("/api/release/<int:release_id>/reviews/<int:review_id>", methods=["PUT"])
-def api_edit_review(release_id, review_id):
-    if not models.Release.exists_by_id(release_id):
-        return jsonify({"error": f"No release with ID {release_id} found"}), 404
+@load_or_404(models.Release, "release_id", inject_as="release_data")
+def api_edit_review(release_data, review_id):
     review_data = request.get_json() or {}
     if "text" not in review_data:
         return jsonify({"error": "Request missing required field: text"}), 400
     review = models.Review.exists_by_id(review_id)
-    if not review or review.release_id != release_id:
+    if not review or review.release_id != release_data.id:
         return (
             jsonify(
-                {"error": f"No review with ID {review_id} found for release {release_id}"}
+                {
+                    "error": f"No review with ID {review_id} found for release {release_data.id}"
+                }
             ),
             404,
         )
     review.text = review_data["text"]
     db.update(review)
-    return jsonify(build_release_detail(models.Release.exists_by_id(release_id)))
+    return jsonify(build_release_detail(release_data))
