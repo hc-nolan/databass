@@ -28,6 +28,7 @@ from .api import Util, MusicBrainz
 from . import db
 from .db import models
 from .db.util import handle_submit_data
+from .errors.util import friendly_message, integrity_error_message
 from .pagination import Pager
 from . import stats2
 
@@ -363,7 +364,10 @@ def register_routes(app):
         try:
             completed_goals = handle_submit_data(release_data)
         except IntegrityError as err:
-            flash(str(err))
+            flash(integrity_error_message(err))
+            return redirect("/error")
+        except Exception as err:
+            flash(friendly_message(err))
             return redirect("/error")
 
         if completed_goals:
@@ -538,7 +542,7 @@ def register_routes(app):
                 raise NameError("Construction of Goal object failed")
         except Exception as e:
             # TODO: move this error handling into errors/routes.py
-            flash(str(e))
+            flash(friendly_message(e))
             return redirect("/error")
 
         db.insert(goal)
@@ -704,7 +708,9 @@ def register_routes(app):
         try:
             completed_goals = handle_submit_data(release_data)
         except IntegrityError as err:
-            return jsonify({"error": str(err)}), 400
+            return jsonify({"error": integrity_error_message(err)}), 400
+        except Exception as err:
+            return jsonify({"error": friendly_message(err)}), 400
 
         return jsonify(
             {
@@ -861,7 +867,7 @@ def register_routes(app):
             if not goal:
                 raise NameError("Construction of Goal object failed")
         except Exception as e:
-            return jsonify({"error": str(e)}), 400
+            return jsonify({"error": friendly_message(e)}), 400
 
         db.insert(goal)
         return jsonify({"ok": True}), 201

@@ -313,6 +313,79 @@ class TestEdit:
         assert response.location == "/error"
         assert b"You should be redirected automatically" in response.data
 
+    def test_edit_post_unsupported_image_url_flashes_error(
+        self, client, mock_release_data, mocker
+    ):
+        """
+        An unsupported image URL should redirect to the error page with a
+        specific message instead of crashing the whole edit.
+        """
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        mocker.patch(
+            "databass.releases.routes.Util.get_image",
+            side_effect=ValueError(
+                "ERROR: No supported image type found in URL: https://example.com/page"
+            ),
+        )
+        response = client.post(
+            "/release/1/edit",
+            data={"image": "https://example.com/page"},
+        )
+        assert response.status_code == 302
+        assert response.location == "/error"
+
+        error_response = client.get("/error")
+        assert b"No supported image type found" in error_response.data
+
+    def test_edit_post_integrity_error_names_field(self, client, mock_release_data, mocker):
+        """A unique-constraint violation on save should name the offending field."""
+        from sqlalchemy.exc import IntegrityError
+
+        mocker.patch("databass.db.construct_item", return_value=mock_release_data)
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        mocker.patch(
+            "databass.releases.routes.db.update",
+            side_effect=IntegrityError(
+                "statement", {}, Exception("UNIQUE constraint failed: release.mbid")
+            ),
+        )
+        response = client.post(
+            "/release/1/edit",
+            data={"name": "BLUE LIPS", "id": "1"},
+        )
+        assert response.status_code == 302
+        assert response.location == "/error"
+
+        error_response = client.get("/error")
+        assert b"mbid" in error_response.data
+        assert b"already exists" in error_response.data
+
+
+class TestApiEditRelease:
+    # Tests for PUT /api/release/<id>
+    def test_api_edit_unsupported_image_url_returns_400(
+        self, client, mock_release_data, mocker
+    ):
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
+        )
+        mocker.patch(
+            "databass.releases.routes.Util.get_image",
+            side_effect=ValueError(
+                "ERROR: No supported image type found in URL: https://example.com/page"
+            ),
+        )
+        response = client.put(
+            "/api/release/1",
+            json={"image": "https://example.com/page"},
+        )
+        assert response.status_code == 400
+        assert "No supported image type found" in response.get_json()["error"]
+
 
 class TestDelete:
     # Tests for /delete

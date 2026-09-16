@@ -1,9 +1,11 @@
 from datetime import datetime
 from flask import Blueprint, render_template, request, redirect, flash, jsonify
+from sqlalchemy.exc import IntegrityError
 from .. import db
 from ..db import models
 from ..api import Util
 from ..detail import build_release_detail
+from ..errors.util import friendly_message, integrity_error_message
 
 release_bp = Blueprint("release_bp", __name__, template_folder="templates")
 
@@ -167,10 +169,14 @@ def edit(release_id):
                 image = edit_data["image"]
                 if "http" and "://" in image:
                     # If image is a URL, download it
-                    new_image = Util.get_image(
-                        entity_type="release", entity_id=release_id, url=image
-                    )
-                    submit_data["image"] = new_image
+                    try:
+                        new_image = Util.get_image(
+                            entity_type="release", entity_id=release_id, url=image
+                        )
+                        submit_data["image"] = new_image
+                    except Exception as err:
+                        flash(f"Could not use image URL: {friendly_message(err)}")
+                        return redirect("/error", code=302)
                 else:
                     print("Image not a URL. Skipping.")
         except KeyError:
@@ -262,7 +268,11 @@ def edit(release_id):
             )
             flash(error)
             return redirect("/error", code=302)
-        db.update(updated_release)
+        try:
+            db.update(updated_release)
+        except IntegrityError as err:
+            flash(integrity_error_message(err))
+            return redirect("/error", code=302)
         return redirect("/", 302)
 
 
@@ -378,7 +388,7 @@ def api_edit_release(release_id):
     try:
         _apply_release_edit(release_id, edit_data)
     except Exception as e:
-        return jsonify({"error": str(e)}), 400
+        return jsonify({"error": friendly_message(e)}), 400
     return jsonify(build_release_detail(models.Release.exists_by_id(release_id)))
 
 

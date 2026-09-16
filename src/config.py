@@ -23,6 +23,10 @@ class Config:
     TIMEZONE = os.environ.get('TIMEZONE')
     STATIC_FOLDER = 'static'
     DEBUG = True
+    # Without this, DEBUG=True causes Flask to re-raise unhandled exceptions
+    # instead of routing them through our registered error handlers, so the
+    # user-facing error page/JSON responses are never shown.
+    PROPAGATE_EXCEPTIONS = False
     # Flask-Assets
     LESS_BIN = '/usr/bin/lessc'
     ASSETS_DEBUG = False
