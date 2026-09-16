@@ -3,14 +3,14 @@ from sqlalchemy.exc import IntegrityError
 from ..db.models import Artist
 from ..api.util import Util
 from ..db import update
+from ..decorators import load_or_404
 from ..detail import build_artist_detail
 from ..errors.util import friendly_message, integrity_error_message
 
 artist_bp = Blueprint("artist_bp", __name__, template_folder="templates")
 
 
-def _apply_artist_edit(artist_id, edit_data: dict) -> Artist:
-    artist_data = Artist.exists_by_id(artist_id)
+def _apply_artist_edit(artist_data: Artist, edit_data: dict) -> Artist:
     start = edit_data.get("start")
     if start:
         artist_data.begin = start
@@ -21,7 +21,9 @@ def _apply_artist_edit(artist_id, edit_data: dict) -> Artist:
     image_url = edit_data.get("image")
     if image_url is not None:
         if "http" and "://" in image_url:
-            Util.get_image(entity_type="artist", entity_id=artist_id, url=image_url)
+            Util.get_image(
+                entity_type="artist", entity_id=artist_data.id, url=image_url
+            )
             artist_data.image = image_url
         else:
             print("Image not a URL. Skipping.")
@@ -39,12 +41,11 @@ def artist(artist_id):
     # Displays all info related to a particular artist
     if artist_id == 0:
         return redirect("/")
-    artist_data = Artist.exists_by_id(item_id=artist_id)
-    if not artist_data:
-        error = f"No release with id {artist_id} found."
-        flash(error)
-        return redirect("/error", code=302)
+    return _artist_detail(artist_id=artist_id)
 
+
+@load_or_404(Artist, "artist_id", inject_as="artist_data")
+def _artist_detail(artist_data):
     return render_template(
         "detail.html", active_page="browse", data=build_artist_detail(artist_data)
     )
@@ -56,14 +57,8 @@ def artists():
 
 
 @artist_bp.route("/artist/<string:artist_id>/edit", methods=["GET", "POST"])
-def edit_artist(artist_id):
-    # Check if artist exists
-    artist_data = Artist.exists_by_id(int(artist_id))
-    if not artist_data:
-        error = f"No artist with id {artist_id} found."
-        flash(error)
-        return redirect("/error", code=302)
-
+@load_or_404(Artist, "artist_id", inject_as="artist_data")
+def edit_artist(artist_data):
     if request.method == "GET":
         countries = Artist.get_distinct_column_values("country")
         countries = sorted([c for c in countries if c is not None])
@@ -74,32 +69,28 @@ def edit_artist(artist_id):
     elif request.method == "POST":
         edit_data = request.form.to_dict()
         try:
-            _apply_artist_edit(artist_id, edit_data)
+            _apply_artist_edit(artist_data, edit_data)
         except IntegrityError as err:
             flash(integrity_error_message(err))
             return redirect("/error", code=302)
         except Exception as err:
             flash(friendly_message(err))
             return redirect("/error", code=302)
-        return redirect("/", 302)
+        return redirect(f"/artist/{artist_data.id}", code=302)
 
 
 # TODO: implement delete_artist
 
 
 @artist_bp.route("/api/artist/<int:artist_id>", methods=["GET"])
-def api_artist(artist_id):
-    artist_data = Artist.exists_by_id(artist_id)
-    if not artist_data:
-        return jsonify({"error": f"No artist with id {artist_id} found."}), 404
+@load_or_404(Artist, "artist_id", inject_as="artist_data")
+def api_artist(artist_data):
     return jsonify(build_artist_detail(artist_data))
 
 
 @artist_bp.route("/api/artist/<int:artist_id>/edit", methods=["GET"])
-def api_edit_artist_get(artist_id):
-    artist_data = Artist.exists_by_id(artist_id)
-    if not artist_data:
-        return jsonify({"error": f"No artist with id {artist_id} found."}), 404
+@load_or_404(Artist, "artist_id", inject_as="artist_data")
+def api_edit_artist_get(artist_data):
     countries = Artist.get_distinct_column_values("country")
     countries = sorted([c for c in countries if c is not None])
     return jsonify(
@@ -116,14 +107,13 @@ def api_edit_artist_get(artist_id):
 
 
 @artist_bp.route("/api/artist/<int:artist_id>", methods=["PUT"])
-def api_edit_artist(artist_id):
-    if not Artist.exists_by_id(artist_id):
-        return jsonify({"error": f"No artist with id {artist_id} found."}), 404
+@load_or_404(Artist, "artist_id", inject_as="artist_data")
+def api_edit_artist(artist_data):
     edit_data = request.get_json() or {}
     try:
-        _apply_artist_edit(artist_id, edit_data)
+        _apply_artist_edit(artist_data, edit_data)
     except IntegrityError as err:
         return jsonify({"error": integrity_error_message(err)}), 400
     except Exception as err:
         return jsonify({"error": friendly_message(err)}), 400
-    return jsonify(build_artist_detail(Artist.exists_by_id(artist_id)))
+    return jsonify(build_artist_detail(artist_data))
