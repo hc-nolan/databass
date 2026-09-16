@@ -54,24 +54,51 @@ class TestArtist:
         assert b"You should be redirected automatically" in response.data
 
 
-# class TestEdit:
-#     # Tests for /artist/<id>/edit
-#     def test_edit_successful_get(self, client):
-#         """
-#         Test for successful handling of a GET request, which displays the editable fields
-#         """
-#
-#     def test_edit_non_existing_release(self, client):
-#         """
-#         Test for successful handling of a GET request for a release that does not exist
-#         """
-#
-#     def test_edit_successful_post(self, client):
-#         """
-#         Test for successful handling of a POST request, which submits edited data
-#         """
-#
-#     def test_edit_failed_post(self, client):
-#         """
-#         Test for successful handling of a malformed POST request
-#         """
+@pytest.fixture()
+def existing_artist(app):
+    with app.app_context():
+        artist = Artist(name="Test Artist")
+        app_db.session.add(artist)
+        app_db.session.commit()
+        return artist.id
+
+
+class TestEditArtist:
+    # Tests for /artist/<id>/edit
+    def test_edit_unsupported_image_url_flashes_error(self, client, mocker, existing_artist):
+        """
+        An image URL with an unsupported file type should redirect to the
+        error page with a specific message instead of crashing.
+        """
+        mocker.patch(
+            "databass.artists.routes.Util.get_image",
+            side_effect=ValueError(
+                "ERROR: No supported image type found in URL: https://example.com/page"
+            ),
+        )
+        response = client.post(
+            f"/artist/{existing_artist}/edit",
+            data={"image": "https://example.com/page"},
+        )
+        assert response.status_code == 302
+        assert response.location == "/error"
+
+        error_response = client.get("/error")
+        assert b"No supported image type found" in error_response.data
+
+
+class TestApiEditArtist:
+    # Tests for PUT /api/artist/<id>
+    def test_api_edit_unsupported_image_url_returns_400(self, client, mocker, existing_artist):
+        mocker.patch(
+            "databass.artists.routes.Util.get_image",
+            side_effect=ValueError(
+                "ERROR: No supported image type found in URL: https://example.com/page"
+            ),
+        )
+        response = client.put(
+            f"/api/artist/{existing_artist}",
+            json={"image": "https://example.com/page"},
+        )
+        assert response.status_code == 400
+        assert "No supported image type found" in response.get_json()["error"]

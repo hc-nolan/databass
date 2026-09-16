@@ -151,6 +151,57 @@ class TestSubmit:
         # Check if handle_submit_data was called
         mock_handler.assert_called_once()
 
+    def test_submit_integrity_error_shows_field_specific_message(self, client, mocker):
+        """A unique-constraint violation should flash which field caused it."""
+        from sqlalchemy.exc import IntegrityError
+
+        mocker.patch(
+            "databass.routes.handle_submit_data",
+            side_effect=IntegrityError(
+                "statement", {}, Exception("UNIQUE constraint failed: release.mbid")
+            ),
+        )
+        data = {
+            "manual_submit": "true",
+            "artist": "asdf",
+            "main_genre": "asdf",
+            "label": "asdf",
+            "name": "asdf",
+            "rating": "50",
+            "year": "2100",
+            "genres": "asdf",
+        }
+        response = client.post("/submit", data=data)
+        assert response.status_code == 302
+        assert response.location == "/error"
+
+        error_response = client.get("/error")
+        assert b"mbid" in error_response.data
+        assert b"already exists" in error_response.data
+
+    def test_submit_unexpected_error_is_flashed_not_500(self, client, mocker):
+        """Any other unexpected exception should also be surfaced, not crash."""
+        mocker.patch(
+            "databass.routes.handle_submit_data",
+            side_effect=ValueError("ERROR: No supported image type found in URL: x"),
+        )
+        data = {
+            "manual_submit": "true",
+            "artist": "asdf",
+            "main_genre": "asdf",
+            "label": "asdf",
+            "name": "asdf",
+            "rating": "50",
+            "year": "2100",
+            "genres": "asdf",
+        }
+        response = client.post("/submit", data=data)
+        assert response.status_code == 302
+        assert response.location == "/error"
+
+        error_response = client.get("/error")
+        assert b"No supported image type found" in error_response.data
+
 
 class TestStats:
     # Tests for /stats

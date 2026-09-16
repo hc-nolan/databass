@@ -852,39 +852,31 @@ class Release(MusicBrainzEntity):
         new_release = construct_item("release", data)
         release_id = insert(new_release)
 
-        if data["image"] is not None:
-            Util.get_image(
-                entity_type="release",
-                entity_id=release_id,
-                url=data["image"],
-                mbid=None,
-                release_name=None,
-                artist_name=None,
-                label_name=None,
-            )
-        else:
-            Util.get_image(
-                url=None,
-                entity_type="release",
-                entity_id=release_id,
-                release_name=data["name"],
-                artist_name=data["artist_name"],
-                label_name=data["label_name"],
-                mbid=data["release_group_mbid"],
-            )
-
+        # A failure to fetch the cover image shouldn't fail the whole
+        # submission, since the release itself has already been saved.
         try:
-            Util.get_image(
-                url=None,
-                entity_type="release",
-                entity_id=release_id,
-                release_name=data["name"],
-                artist_name=data["artist_name"],
-                label_name=data["label_name"],
-                mbid=data["release_group_mbid"],
-            )
-        except KeyError:
-            pass
+            if data["image"] is not None:
+                Util.get_image(
+                    entity_type="release",
+                    entity_id=release_id,
+                    url=data["image"],
+                    mbid=None,
+                    release_name=None,
+                    artist_name=None,
+                    label_name=None,
+                )
+            else:
+                Util.get_image(
+                    url=None,
+                    entity_type="release",
+                    entity_id=release_id,
+                    release_name=data["name"],
+                    artist_name=data["artist_name"],
+                    label_name=data["label_name"],
+                    mbid=data["release_group_mbid"],
+                )
+        except Exception as err:
+            print(f"WARNING: Could not fetch image for release {release_id}: {err}")
 
         return release_id
 

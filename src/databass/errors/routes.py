@@ -1,4 +1,7 @@
-from flask import Blueprint, render_template, request, get_flashed_messages
+import traceback
+from flask import Blueprint, render_template, request, get_flashed_messages, flash, redirect, jsonify
+from werkzeug.exceptions import HTTPException
+from .util import friendly_message
 
 error_bp = Blueprint(
     'error_bp', __name__,
@@ -47,3 +50,21 @@ def unsupported_media_type(e):
 def error():
     error_message = get_flashed_messages()
     return render_template('error.html', error=error_message)
+
+
+@error_bp.app_errorhandler(Exception)
+def handle_uncaught_exception(e):
+    """
+    Last-resort safety net for any exception that a route didn't handle
+    itself. Logs the full traceback server-side (so it's still debuggable)
+    and shows the user a short, friendly message instead of a raw 500.
+    """
+    if isinstance(e, HTTPException):
+        return e
+
+    traceback.print_exc()
+    message = friendly_message(e)
+    if request.path.startswith('/api/'):
+        return jsonify({"error": message}), 500
+    flash(message)
+    return redirect('/error')

@@ -19,7 +19,7 @@ def insert(item: app_db.Model) -> int:
         int: The ID of the newly inserted item.
 
     Raises:
-        IntegrityError: If there is a SQLite integrity error when inserting the item.
+        IntegrityError: If there is a database integrity error when inserting the item.
         Exception: For any other unexpected errors.
     """
     try:
@@ -29,8 +29,8 @@ def insert(item: app_db.Model) -> int:
     except IntegrityError as err:
         app_db.session.rollback()
         raise IntegrityError(
-            f"SQLite Integrity Error: \n{err}\n", params=err.params, orig=err
-        )
+            f"Database integrity error: \n{err}\n", params=err.params, orig=err.orig
+        ) from err
     except Exception as err:
         app_db.session.rollback()
         raise Exception(f"Unexpected error: {err}")
@@ -56,6 +56,11 @@ def update(item: app_db.Model) -> None:
             app_db.session.commit()
         else:
             raise Exception(f"No entry found with ID {item.id}")
+    except IntegrityError as err:
+        app_db.session.rollback()
+        raise IntegrityError(
+            f"Database integrity error: \n{err}\n", params=err.params, orig=err.orig
+        ) from err
     except Exception as err:
         app_db.session.rollback()
         raise Exception(f"Unexpected error: {err}")

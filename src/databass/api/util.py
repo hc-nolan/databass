@@ -210,7 +210,7 @@ class Util:
                 img_type = caa_image.get("type")
             except Exception:
                 print("Image not found on CAA, checking Discogs")
-                Util.get_image(
+                return Util.get_image(
                     url=None,
                     mbid=None,
                     entity_type=entity_type,
@@ -221,12 +221,16 @@ class Util:
                 )
         else:
             print(f"Attempting to fetch {entity_type} image from Discogs")
-            discogs_image = Util.get_discogs_image(
-                entity_type=entity_type,
-                release_name=release_name,
-                artist_name=artist_name,
-                label_name=label_name,
-            )
+            try:
+                discogs_image = Util.get_discogs_image(
+                    entity_type=entity_type,
+                    release_name=release_name,
+                    artist_name=artist_name,
+                    label_name=label_name,
+                )
+            except Exception as err:
+                print(f"WARNING: Could not fetch {entity_type} image from Discogs: {err}")
+                return None
             img = discogs_image.get("image")
             img_type = discogs_image.get("type")
 
