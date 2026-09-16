@@ -643,7 +643,7 @@ class Release(MusicBrainzEntity):
         """
         if not isinstance(data, dict):
             raise ValueError("data argument must be a dictionary")
-        from ...api import image
+        from ...api import Util, image
 
         new_release = Release(**data)
         release_id = insert(new_release)
@@ -652,20 +652,10 @@ class Release(MusicBrainzEntity):
         # submission, since the release itself has already been saved.
         try:
             if data["image"] is not None:
-                image.get_image(
-                    entity_type="release",
-                    entity_id=release_id,
-                    url=data["image"],
-                    mbid=None,
-                    release_name=None,
-                    artist_name=None,
-                    label_name=None,
-                )
+                Util.get_image_from_url(entity_type="release", url=data["image"])
             else:
-                image.get_image(
-                    url=None,
+                image.fetch_image(
                     entity_type="release",
-                    entity_id=release_id,
                     release_name=data["name"],
                     artist_name=data["artist_name"],
                     label_name=data["label_name"],
@@ -1135,28 +1125,24 @@ class ArtistOrLabel(MusicBrainzEntity):
                     return item_exists.id
 
             item_id = insert(new_item)
-            # TODO: see if image.get_image() can be refactored; instead of label_name and artist_name use item_name
+            # TODO: see if image.fetch_image() can be refactored; instead of label_name and artist_name use item_name
             if cls.__name__ == "Label":
-                image.get_image(
+                image.fetch_image(
                     entity_type="label",
-                    entity_id=item_id,
                     label_name=name,
                     mbid=None,
                     release_name=None,
                     artist_name=None,
-                    url=None,
                 )
             elif cls.__name__ == "Artist":
-                image.get_image(
+                image.fetch_image(
                     entity_type="artist",
-                    entity_id=item_id,
                     artist_name=name,
                     mbid=None,
                     release_name=None,
                     label_name=None,
-                    url=None,
                 )
-            # TODO: figure out a way to call image.get_image() upon any insertion so it doesn't need to be manually called
+            # TODO: figure out a way to call image.fetch_image() upon any insertion so it doesn't need to be manually called
         return item_id
 
 

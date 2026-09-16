@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, jsonify
 from sqlalchemy.exc import IntegrityError
 from ..db.models import Artist
-from ..api import image as image_api
+from ..api import Util
 from ..db import update
 from ..decorators import load_or_404
 from ..detail import build_artist_detail
@@ -21,9 +21,7 @@ def _apply_artist_edit(artist_data: Artist, edit_data: dict) -> Artist:
     image_url = edit_data.get("image")
     if image_url is not None:
         if "://" in image_url:
-            image_api.get_image(
-                entity_type="artist", entity_id=artist_data.id, url=image_url
-            )
+            Util.get_image_from_url(entity_type="artist", url=image_url)
             artist_data.image = image_url
         else:
             print("Image not a URL. Skipping.")

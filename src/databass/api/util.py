@@ -1,7 +1,7 @@
 import datetime
 from os import getenv
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 from uuid import uuid4
 import requests
 from dotenv import load_dotenv
@@ -111,7 +111,12 @@ class Util:
         )
 
     @staticmethod
-    def get_image_from_url(url: str, entity_type: str):
+    def get_image_from_url(url: str, entity_type: Literal["release", "artist", "label"]):
+        if entity_type not in VALID_TYPES:
+            raise ValueError(
+                f"Invalid entity_type: {entity_type}. "
+                f"Must be one of the following strings: {', '.join(VALID_TYPES)}"
+            )
         response = requests.get(
             url,
             headers={
@@ -120,6 +125,7 @@ class Util:
             timeout=30,
         )
         if response:
+            Path(f"{IMG_BASE_PATH}/{entity_type}").mkdir(parents=True, exist_ok=True)
             ext = Util.get_image_type_from_url(url)
             img_filepath = IMG_BASE_PATH + f"/{entity_type}/" + str(uuid4()) + ext
             with open(img_filepath, "wb") as img_file:

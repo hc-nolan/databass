@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, request, redirect, flash, jsonify
 from sqlalchemy.exc import IntegrityError
 from .. import db
 from ..db import models
-from ..api import image as image_api
+from ..api import Util
 from ..decorators import load_or_404
 from ..detail import build_release_detail
 from ..errors.util import friendly_message, integrity_error_message
@@ -41,9 +41,7 @@ def _apply_release_edit(release_data: models.Release, edit_data: dict) -> models
     image = edit_data.get("image")
     if image:
         if "://" in image:
-            new_image = image_api.get_image(
-                entity_type="release", entity_id=release_data.id, url=image
-            )
+            new_image = Util.get_image_from_url(entity_type="release", url=image)
             submit_data["image"] = new_image
         else:
             print("Image not a URL. Skipping.")

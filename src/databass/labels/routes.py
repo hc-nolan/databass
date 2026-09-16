@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, request, flash, redirect, jsonify
 from sqlalchemy.exc import IntegrityError
 from ..db.models import Label
 from ..db import update
-from ..api import image as image_api
+from ..api import Util
 from ..decorators import load_or_404
 from ..detail import build_label_detail
 from ..errors.util import friendly_message, integrity_error_message
@@ -21,9 +21,7 @@ def _apply_label_edit(label_data: Label, edit_data: dict) -> Label:
     image = edit_data.get("image")
     if image is not None:
         if "://" in image:
-            new_image = image_api.get_image(
-                entity_type="label", entity_id=label_data.id, url=image
-            )
+            new_image = Util.get_image_from_url(entity_type="label", url=image)
             label_data.image = new_image
         else:
             print("Image not a URL. Skipping.")

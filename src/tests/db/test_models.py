@@ -1030,7 +1030,7 @@ class TestReleaseCreateNew:
     def test_create_new_returns_integer(self, mocker):
         """Test that create_new returns an integer ID"""
         mock_insert = mocker.patch("databass.db.models.catalog.insert")
-        mock_get_image = mocker.patch("databass.api.image.get_image")
+        mock_get_image = mocker.patch("databass.api.image.fetch_image")
 
         mock_insert.return_value = 42
         mock_get_image.return_value = "path/to/image.jpg"
@@ -1056,7 +1056,7 @@ class TestReleaseCreateNew:
     def test_create_new_constructs_release_correctly(self, mocker):
         """Test that create_new constructs a Release with the given data before inserting"""
         mock_insert = mocker.patch("databass.db.models.catalog.insert")
-        mocker.patch("databass.api.image.get_image")
+        mocker.patch("databass.api.image.fetch_image")
 
         test_data = {
             "name": "Test Release",
@@ -1076,7 +1076,7 @@ class TestReleaseCreateNew:
     def test_create_new_missing_optional_fields(self, mocker):
         """Test that create_new doesn't raise when optional fields are absent"""
         mock_insert = mocker.patch("databass.db.models.catalog.insert")
-        mock_get_image = mocker.patch("databass.api.image.get_image")
+        mock_get_image = mocker.patch("databass.api.image.fetch_image")
         mock_insert.return_value = 1
 
         test_data = {"name": "Test Release"}

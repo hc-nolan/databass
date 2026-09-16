@@ -6,7 +6,7 @@ leaf module with no dependency on MusicBrainz/Discogs.
 
 import signal
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 from uuid import uuid4
 import requests
 from .discogs import Discogs
@@ -81,40 +81,33 @@ def write_image(entity_type: str, img_type: str, img_bytes: bytes) -> str:
     return file_path.replace("databass/", "")
 
 
-def get_image(
-    entity_type: str,
-    entity_id: str | int,
+def fetch_image(
+    entity_type: Literal["release", "artist", "label"],
     mbid: Optional[str],
     release_name: Optional[str],
     artist_name: Optional[str],
     label_name: Optional[str],
-    url: Optional[str],
 ):
+    """Fetch a cover/entity image from CoverArtArchive (releases only) or
+    Discogs, and write it to disk. For images already at a URL, use
+    Util.get_image_from_url instead."""
     if entity_type not in VALID_TYPES:
         raise ValueError(f"Unexpected entity_type: {entity_type}")
-    if url:
-        return Util.get_image_from_url(entity_type=entity_type, url=url)
     Path(f"{IMG_BASE_PATH}/{entity_type}").mkdir(parents=True, exist_ok=True)
 
     img = img_type = None
 
+    fetched_from_caa = False
     if mbid is not None and entity_type == "release":
         try:
             caa_image = get_caa_image(mbid=mbid)
             img = caa_image.get("image")
             img_type = caa_image.get("type")
+            fetched_from_caa = True
         except Exception:
             print("Image not found on CAA, checking Discogs")
-            return get_image(
-                url=None,
-                mbid=None,
-                entity_type=entity_type,
-                entity_id=entity_id,
-                release_name=release_name,
-                artist_name=artist_name,
-                label_name=label_name,
-            )
-    else:
+
+    if not fetched_from_caa:
         print(f"Attempting to fetch {entity_type} image from Discogs")
         try:
             discogs_image = get_discogs_image(
@@ -125,12 +118,12 @@ def get_image(
             )
         except Exception as err:
             print(f"WARNING: Could not fetch {entity_type} image from Discogs: {err}")
-            return None
+            return
         img = discogs_image.get("image")
         img_type = discogs_image.get("type")
 
     if img is not None and img_type is not None:
-        return write_image(
+        write_image(
             entity_type=entity_type,
             img_bytes=img,
             img_type=img_type,
