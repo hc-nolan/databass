@@ -231,72 +231,224 @@ def build_browse_entity_item(row, entity_type: str) -> dict:
     }
 
 
+def _home_payload() -> dict:
+    """Shared data for the home page and its /api/home counterpart."""
+    active_goals = models.Goal.get_incomplete()
+    goal = None
+    if active_goals:
+        goal = process_goal_data(active_goals[0])
+        current_pace = models.Release.added_per_day_this_year()
+        goal["on_track"] = current_pace >= goal["target"]
+
+    this_year = {
+        "count": models.Release.added_this_year(),
+        "new_artists": models.Artist.added_this_year(),
+        "new_labels": models.Label.added_this_year(),
+        "listening_time": models.Release.runtime_this_year(),
+        "average_score": round(models.Release.average_rating_this_year() / 10, 1),
+        "pace": models.Release.added_per_day_this_year(),
+    }
+
+    distribution = models.Release.rating_distribution()
+    max_bucket = max(distribution["buckets"]) or 1
+    score_spread = [
+        {
+            "pct": round((count / max_bucket) * 100),
+            "is_peak": count == max_bucket and count > 0,
+        }
+        for count in distribution["buckets"]
+    ]
+
+    on_repeat = models.Artist.on_repeat(days=90, limit=3)
+    for entity in on_repeat:
+        entity["has_art"] = image_exists("artist", entity["id"])
+        entity["art_key"] = initials(entity["name"])
+
+    return {
+        "this_year": this_year,
+        "goal": goal,
+        "score_spread": score_spread,
+        "median_score": distribution["median"],
+        "on_repeat": on_repeat,
+    }
+
+
+def _home_entries_payload() -> tuple[list[dict], "Pager"]:
+    """Shared data for the home release feed and its /api/home/entries counterpart."""
+    rows = models.Release.home_data_light()
+    groups = build_day_groups(rows)
+
+    page = Pager.get_page_param(request)
+    paged_groups, flask_pagination = Pager.paginate(
+        per_page=4, current_page=page, data=groups
+    )
+
+    # Only hydrate full entries (with relationships + art lookups) for
+    # releases on the current page, rather than the whole library.
+    page_ids = [id_ for group in paged_groups for id_ in group["ids"]]
+    releases_by_id = {r.id: r for r in models.Release.by_ids(page_ids)}
+    for group in paged_groups:
+        group["items"] = [
+            build_entry(releases_by_id[id_])
+            for id_ in group["ids"]
+            if id_ in releases_by_id
+        ]
+
+    return paged_groups, flask_pagination
+
+
+def _new_payload() -> dict:
+    """Shared data for the new-release page and its /api/new counterpart."""
+    all_genres = sorted(models.Genre.get_distinct_column_values("name"))
+    goal_nudge = None
+    active_goals = models.Goal.get_incomplete()
+    if active_goals:
+        g_data = process_goal_data(active_goals[0])
+        remaining = max(g_data["amount"] - g_data["current"], 0)
+        goal_nudge = f"{remaining} to go on your {g_data['end'].year} {g_data['type']} goal"
+    return {"all_genres": all_genres, "goal_nudge": goal_nudge}
+
+
+def _search_results(data: dict) -> list[dict] | None:
+    """
+    Shared search logic for /search and /api/search: returns the annotated
+    MusicBrainz results, or None if the request didn't include a search term.
+    """
+    search_release = data.get("release")
+    search_artist = data.get("artist")
+    search_label = data.get("label")
+    if search_release is None and search_artist is None and search_label is None:
+        return None
+
+    release_data = MusicBrainz.release_search(
+        release=search_release, artist=search_artist, label=search_label
+    )
+    results = []
+    for item in release_data:
+        mbid = item["release"].get("mbid")
+        logged = bool(mbid and models.Release.exists_by_mbid(mbid))
+        artist_name = item["artist"].get("name") or item["release"].get("name") or ""
+        results.append({**item, "logged": logged, "initials": initials(artist_name)})
+    return results
+
+
+def _browse_results_payload(tab: str) -> dict:
+    """Shared data for /browse/<tab>/results and its /api counterpart."""
+    q = request.args.get("q", "").strip()
+    country = request.args.get("country", "")
+    rating_min = request.args.get("rating_min", type=int)
+    page = max(request.args.get("page", 1, type=int), 1)
+    per_page = 30
+
+    if tab == "releases":
+        sort = request.args.get("sort", "listened")
+        genre = request.args.get("genre", "")
+        year_min = request.args.get("year_min", type=int)
+        rows, total = models.Release.browse_search(
+            q=q,
+            country=country,
+            genre=genre,
+            year_min=year_min,
+            rating_min=rating_min * 10 if rating_min else None,
+            sort=sort,
+            page=page,
+            per_page=per_page,
+        )
+        items = [build_browse_release_item(r) for r in rows]
+    else:
+        model = models.Artist if tab == "artists" else models.Label
+        sort = request.args.get("sort", "releases")
+        type_ = request.args.get("type", "")
+        releases_min = request.args.get("releases_min", type=int)
+        rows, total = model.browse_search(
+            q=q,
+            country=country,
+            type_=type_,
+            releases_min=releases_min,
+            rating_min=rating_min * 10 if rating_min else None,
+            sort=sort,
+            page=page,
+            per_page=per_page,
+        )
+        items = [build_browse_entity_item(r, tab[:-1]) for r in rows]
+
+    total_pages = max(-(-total // per_page), 1)
+    return {"items": items, "total": total, "page": page, "total_pages": total_pages}
+
+
+def _goals_payload() -> dict:
+    """Shared data for the goals page and its /api/goals counterpart."""
+    incomplete_goals = models.Goal.get_incomplete() or []
+    # An incomplete goal past its end date is missed, not active; get_past()
+    # already surfaces it there, so exclude it here to avoid double-counting
+    # it as an in-progress goal with no upper bound on its current_amount.
+    current_incomplete_goals = [
+        g for g in incomplete_goals if g.end >= datetime.now()
+    ]
+    active_goal = (
+        build_active_goal_view(current_incomplete_goals[0])
+        if current_incomplete_goals
+        else None
+    )
+    past_goals = [build_past_goal_view(g) for g in models.Goal.get_past()]
+
+    today_date = datetime.now().date()
+    next_new_year = date(today_date.year + 1, 1, 1)
+    goal_presets = [
+        {
+            "label": "365 in a year",
+            "amount": 365,
+            "end": (today_date + timedelta(days=365)).isoformat(),
+        },
+        {
+            "label": "100 by new year",
+            "amount": 100,
+            "end": next_new_year.isoformat(),
+        },
+        {
+            "label": "1000 in a year",
+            "amount": 1000,
+            "end": (today_date + timedelta(days=365)).isoformat(),
+        },
+    ]
+    goal_types = [
+        {"value": "release", "label": "releases"},
+        {"value": "artist", "label": "artists"},
+        {"value": "label", "label": "labels"},
+    ]
+
+    return {
+        "active_goal": active_goal,
+        "past_goals": past_goals,
+        "current_pace": models.Release.added_per_day_this_year(),
+        "today": Util.today(),
+        "default_amount": 100,
+        "default_end": (today_date + timedelta(days=90)).isoformat(),
+        "goal_presets": goal_presets,
+        "goal_types": goal_types,
+    }
+
+
+def _construct_goal_or_error(data: dict) -> tuple["models.Goal | None", str | None]:
+    """Shared goal-construction logic for /add_goal and /api/goals (POST)."""
+    try:
+        goal = db.construct_item(model_name="goal", data_dict=data)
+        if not goal:
+            raise NameError("Construction of Goal object failed")
+    except Exception as e:  # pylint: disable=broad-exception-caught
+        return None, friendly_message(e)
+    return goal, None
+
+
 def register_routes(app):
     @app.route("/", methods=["GET"])
     @app.route("/home", methods=["GET"])
     def home() -> str:
-        active_goals = models.Goal.get_incomplete()
-        goal = None
-        if active_goals:
-            goal = process_goal_data(active_goals[0])
-            current_pace = models.Release.added_per_day_this_year()
-            goal["on_track"] = current_pace >= goal["target"]
-
-        this_year = {
-            "count": models.Release.added_this_year(),
-            "new_artists": models.Artist.added_this_year(),
-            "new_labels": models.Label.added_this_year(),
-            "listening_time": models.Release.runtime_this_year(),
-            "average_score": round(models.Release.average_rating_this_year() / 10, 1),
-            "pace": models.Release.added_per_day_this_year(),
-        }
-
-        distribution = models.Release.rating_distribution()
-        max_bucket = max(distribution["buckets"]) or 1
-        score_spread = [
-            {
-                "pct": round((count / max_bucket) * 100),
-                "is_peak": count == max_bucket and count > 0,
-            }
-            for count in distribution["buckets"]
-        ]
-
-        on_repeat = models.Artist.on_repeat(days=90, limit=3)
-        for entity in on_repeat:
-            entity["has_art"] = image_exists("artist", entity["id"])
-            entity["art_key"] = initials(entity["name"])
-
-        return render_template(
-            "index.html",
-            this_year=this_year,
-            goal=goal,
-            score_spread=score_spread,
-            median_score=distribution["median"],
-            on_repeat=on_repeat,
-            active_page="home",
-        )
+        return render_template("index.html", active_page="home", **_home_payload())
 
     @app.route("/home_release_table")
     def home_release_table():
-        rows = models.Release.home_data_light()
-        groups = build_day_groups(rows)
-
-        page = Pager.get_page_param(request)
-        paged_groups, flask_pagination = Pager.paginate(
-            per_page=4, current_page=page, data=groups
-        )
-
-        # Only hydrate full entries (with relationships + art lookups) for
-        # releases on the current page, rather than the whole library.
-        page_ids = [id_ for group in paged_groups for id_ in group["ids"]]
-        releases_by_id = {r.id: r for r in models.Release.by_ids(page_ids)}
-        for group in paged_groups:
-            group["items"] = [
-                build_entry(releases_by_id[id_])
-                for id_ in group["ids"]
-                if id_ in releases_by_id
-            ]
-
+        paged_groups, flask_pagination = _home_entries_payload()
         return render_template(
             "home_release_table.html",
             groups=paged_groups,
@@ -306,22 +458,12 @@ def register_routes(app):
     @app.route("/new")
     def new():
         q = request.args.get("q", "").strip()
-        all_genres = sorted(models.Genre.get_distinct_column_values("name"))
-        goal_nudge = None
-        active_goals = models.Goal.get_incomplete()
-        if active_goals:
-            g_data = process_goal_data(active_goals[0])
-            remaining = max(g_data["amount"] - g_data["current"], 0)
-            goal_nudge = (
-                f"{remaining} to go on your {g_data['end'].year} {g_data['type']} goal"
-            )
         return render_template(
             "new.html",
             active_page="new",
             q=q,
-            all_genres=all_genres,
-            goal_nudge=goal_nudge,
             today=Util.today(),
+            **_new_payload(),
         )
 
     @app.route("/search", methods=["POST", "GET"])
@@ -329,25 +471,10 @@ def register_routes(app):
         if request.method == "GET":
             return render_template("new_manual_entry.html")
 
-        data = request.get_json()
-        search_release = data.get("release")
-        search_artist = data.get("artist")
-        search_label = data.get("label")
-
-        if search_release is None and search_artist is None and search_label is None:
-            error = "ERROR: Search requires at least one search term"
-            flash(error)
+        results = _search_results(request.get_json())
+        if results is None:
+            flash("ERROR: Search requires at least one search term")
             return redirect("/error")
-
-        release_data = MusicBrainz.release_search(
-            release=search_release, artist=search_artist, label=search_label
-        )
-        results = []
-        for item in release_data:
-            mbid = item["release"].get("mbid")
-            logged = bool(mbid and models.Release.exists_by_mbid(mbid))
-            artist_name = item["artist"].get("name") or item["release"].get("name") or ""
-            results.append({**item, "logged": logged, "initials": initials(artist_name)})
 
         return render_template("new_search_results.html", data=results)
 
@@ -399,52 +526,8 @@ def register_routes(app):
     def browse_results(tab):
         if tab not in ("releases", "artists", "labels"):
             abort(404)
-        q = request.args.get("q", "").strip()
-        country = request.args.get("country", "")
-        rating_min = request.args.get("rating_min", type=int)
-        page = max(request.args.get("page", 1, type=int), 1)
-        per_page = 30
-
-        if tab == "releases":
-            sort = request.args.get("sort", "listened")
-            genre = request.args.get("genre", "")
-            year_min = request.args.get("year_min", type=int)
-            rows, total = models.Release.browse_search(
-                q=q,
-                country=country,
-                genre=genre,
-                year_min=year_min,
-                rating_min=rating_min * 10 if rating_min else None,
-                sort=sort,
-                page=page,
-                per_page=per_page,
-            )
-            items = [build_browse_release_item(r) for r in rows]
-        else:
-            model = models.Artist if tab == "artists" else models.Label
-            sort = request.args.get("sort", "releases")
-            type_ = request.args.get("type", "")
-            releases_min = request.args.get("releases_min", type=int)
-            rows, total = model.browse_search(
-                q=q,
-                country=country,
-                type_=type_,
-                releases_min=releases_min,
-                rating_min=rating_min * 10 if rating_min else None,
-                sort=sort,
-                page=page,
-                per_page=per_page,
-            )
-            items = [build_browse_entity_item(r, tab[:-1]) for r in rows]
-
-        total_pages = max(-(-total // per_page), 1)
         return render_template(
-            "browse_results.html",
-            items=items,
-            total=total,
-            page=page,
-            total_pages=total_pages,
-            tab=tab,
+            "browse_results.html", tab=tab, **_browse_results_payload(tab)
         )
 
     @app.route("/stats", methods=["GET"])
@@ -474,75 +557,19 @@ def register_routes(app):
     def goals():
         if request.method != "GET":
             abort(405)
-
-        incomplete_goals = models.Goal.get_incomplete() or []
-        # An incomplete goal past its end date is missed, not active; get_past()
-        # already surfaces it there, so exclude it here to avoid double-counting
-        # it as an in-progress goal with no upper bound on its current_amount.
-        current_incomplete_goals = [
-            g for g in incomplete_goals if g.end >= datetime.now()
-        ]
-        active_goal = (
-            build_active_goal_view(current_incomplete_goals[0])
-            if current_incomplete_goals
-            else None
-        )
-        past_goals = [build_past_goal_view(g) for g in models.Goal.get_past()]
-        current_pace = models.Release.added_per_day_this_year()
-
-        today_date = datetime.now().date()
-        next_new_year = date(today_date.year + 1, 1, 1)
-        goal_presets = [
-            {
-                "label": "365 in a year",
-                "amount": 365,
-                "end": (today_date + timedelta(days=365)).isoformat(),
-            },
-            {
-                "label": "100 by new year",
-                "amount": 100,
-                "end": next_new_year.isoformat(),
-            },
-            {
-                "label": "1000 in a year",
-                "amount": 1000,
-                "end": (today_date + timedelta(days=365)).isoformat(),
-            },
-        ]
-        goal_types = [
-            {"value": "release", "label": "releases"},
-            {"value": "artist", "label": "artists"},
-            {"value": "label", "label": "labels"},
-        ]
-
-        return render_template(
-            "goals.html",
-            active_page="goals",
-            active_goal=active_goal,
-            past_goals=past_goals,
-            current_pace=current_pace,
-            today=Util.today(),
-            default_amount=100,
-            default_end=(today_date + timedelta(days=90)).isoformat(),
-            goal_presets=goal_presets,
-            goal_types=goal_types,
-        )
+        return render_template("goals.html", active_page="goals", **_goals_payload())
 
     @app.route("/add_goal", methods=["POST"])
     def add_goal():
         data = request.form.to_dict()
         if not data:
-            error = "/add_goal received an empty payload"
+            # TODO: move this error handling into errors/routes.py
+            flash("/add_goal received an empty payload")
+            return redirect("/error")
+        goal, error = _construct_goal_or_error(data)
+        if error:
             # TODO: move this error handling into errors/routes.py
             flash(error)
-            return redirect("/error")
-        try:
-            goal = db.construct_item(model_name="goal", data_dict=data)
-            if not goal:
-                raise NameError("Construction of Goal object failed")
-        except Exception as e:
-            # TODO: move this error handling into errors/routes.py
-            flash(friendly_message(e))
             return redirect("/error")
 
         db.insert(goal)
@@ -579,47 +606,15 @@ def register_routes(app):
 
     @app.route("/api/home", methods=["GET"])
     def api_home():
-        active_goals = models.Goal.get_incomplete()
-        goal = None
-        if active_goals:
-            goal = process_goal_data(active_goals[0])
-            current_pace = models.Release.added_per_day_this_year()
-            goal["on_track"] = current_pace >= goal["target"]
-            goal["start"] = goal["start"].isoformat()
-            goal["end_year"] = goal["end"].year
-            goal["end"] = goal["end"].isoformat()
-
-        this_year = {
-            "count": models.Release.added_this_year(),
-            "new_artists": models.Artist.added_this_year(),
-            "new_labels": models.Label.added_this_year(),
-            "listening_time": models.Release.runtime_this_year(),
-            "average_score": round(models.Release.average_rating_this_year() / 10, 1),
-            "pace": models.Release.added_per_day_this_year(),
-        }
-
-        distribution = models.Release.rating_distribution()
-        max_bucket = max(distribution["buckets"]) or 1
-        score_spread = [
-            {
-                "pct": round((count / max_bucket) * 100),
-                "is_peak": count == max_bucket and count > 0,
-            }
-            for count in distribution["buckets"]
-        ]
-
-        on_repeat = models.Artist.on_repeat(days=90, limit=3)
-        for entity in on_repeat:
-            entity["has_art"] = image_exists("artist", entity["id"])
-            entity["art_key"] = initials(entity["name"])
+        payload = _home_payload()
+        if payload["goal"]:
+            payload["goal"]["start"] = payload["goal"]["start"].isoformat()
+            payload["goal"]["end_year"] = payload["goal"]["end"].year
+            payload["goal"]["end"] = payload["goal"]["end"].isoformat()
 
         return jsonify(
             {
-                "this_year": this_year,
-                "goal": goal,
-                "score_spread": score_spread,
-                "median_score": distribution["median"],
-                "on_repeat": on_repeat,
+                **payload,
                 "total_logged": flask.g.total_logged,
                 "day_of_year": flask.g.day_of_year,
                 "current_year": flask.g.current_year,
@@ -628,22 +623,9 @@ def register_routes(app):
 
     @app.route("/api/home/entries", methods=["GET"])
     def api_home_entries():
-        rows = models.Release.home_data_light()
-        groups = build_day_groups(rows)
-
         page = Pager.get_page_param(request)
-        paged_groups, flask_pagination = Pager.paginate(
-            per_page=4, current_page=page, data=groups
-        )
-
-        page_ids = [id_ for group in paged_groups for id_ in group["ids"]]
-        releases_by_id = {r.id: r for r in models.Release.by_ids(page_ids)}
+        paged_groups, flask_pagination = _home_entries_payload()
         for group in paged_groups:
-            group["items"] = [
-                build_entry(releases_by_id[id_])
-                for id_ in group["ids"]
-                if id_ in releases_by_id
-            ]
             del group["ids"]
 
         return jsonify(
@@ -656,19 +638,9 @@ def register_routes(app):
 
     @app.route("/api/new", methods=["GET"])
     def api_new():
-        all_genres = sorted(models.Genre.get_distinct_column_values("name"))
-        goal_nudge = None
-        active_goals = models.Goal.get_incomplete()
-        if active_goals:
-            g_data = process_goal_data(active_goals[0])
-            remaining = max(g_data["amount"] - g_data["current"], 0)
-            goal_nudge = (
-                f"{remaining} to go on your {g_data['end'].year} {g_data['type']} goal"
-            )
         return jsonify(
             {
-                "all_genres": all_genres,
-                "goal_nudge": goal_nudge,
+                **_new_payload(),
                 "today": Util.today(),
                 "total_logged": flask.g.total_logged,
             }
@@ -677,22 +649,9 @@ def register_routes(app):
     @app.route("/api/search", methods=["POST"])
     def api_search():
         data = request.get_json() or {}
-        search_release = data.get("release")
-        search_artist = data.get("artist")
-        search_label = data.get("label")
-
-        if search_release is None and search_artist is None and search_label is None:
+        results = _search_results(data)
+        if results is None:
             return jsonify({"error": "Search requires at least one search term"}), 400
-
-        release_data = MusicBrainz.release_search(
-            release=search_release, artist=search_artist, label=search_label
-        )
-        results = []
-        for item in release_data:
-            mbid = item["release"].get("mbid")
-            logged = bool(mbid and models.Release.exists_by_mbid(mbid))
-            artist_name = item["artist"].get("name") or item["release"].get("name") or ""
-            results.append({**item, "logged": logged, "initials": initials(artist_name)})
 
         return jsonify({"results": results})
 
@@ -734,53 +693,7 @@ def register_routes(app):
     def api_browse_results(tab):
         if tab not in ("releases", "artists", "labels"):
             abort(404)
-        q = request.args.get("q", "").strip()
-        country = request.args.get("country", "")
-        rating_min = request.args.get("rating_min", type=int)
-        page = max(request.args.get("page", 1, type=int), 1)
-        per_page = 30
-
-        if tab == "releases":
-            sort = request.args.get("sort", "listened")
-            genre = request.args.get("genre", "")
-            year_min = request.args.get("year_min", type=int)
-            rows, total = models.Release.browse_search(
-                q=q,
-                country=country,
-                genre=genre,
-                year_min=year_min,
-                rating_min=rating_min * 10 if rating_min else None,
-                sort=sort,
-                page=page,
-                per_page=per_page,
-            )
-            items = [build_browse_release_item(r) for r in rows]
-        else:
-            model = models.Artist if tab == "artists" else models.Label
-            sort = request.args.get("sort", "releases")
-            type_ = request.args.get("type", "")
-            releases_min = request.args.get("releases_min", type=int)
-            rows, total = model.browse_search(
-                q=q,
-                country=country,
-                type_=type_,
-                releases_min=releases_min,
-                rating_min=rating_min * 10 if rating_min else None,
-                sort=sort,
-                page=page,
-                per_page=per_page,
-            )
-            items = [build_browse_entity_item(r, tab[:-1]) for r in rows]
-
-        total_pages = max(-(-total // per_page), 1)
-        return jsonify(
-            {
-                "items": items,
-                "total": total,
-                "page": page,
-                "total_pages": total_pages,
-            }
-        )
+        return jsonify(_browse_results_payload(tab))
 
     @app.route("/api/stats", methods=["GET"])
     def api_stats():
@@ -808,66 +721,16 @@ def register_routes(app):
 
     @app.route("/api/goals", methods=["GET"])
     def api_goals():
-        incomplete_goals = models.Goal.get_incomplete() or []
-        current_incomplete_goals = [
-            g for g in incomplete_goals if g.end >= datetime.now()
-        ]
-        active_goal = (
-            build_active_goal_view(current_incomplete_goals[0])
-            if current_incomplete_goals
-            else None
-        )
-        past_goals = [build_past_goal_view(g) for g in models.Goal.get_past()]
-
-        today_date = datetime.now().date()
-        next_new_year = date(today_date.year + 1, 1, 1)
-        goal_presets = [
-            {
-                "label": "365 in a year",
-                "amount": 365,
-                "end": (today_date + timedelta(days=365)).isoformat(),
-            },
-            {
-                "label": "100 by new year",
-                "amount": 100,
-                "end": next_new_year.isoformat(),
-            },
-            {
-                "label": "1000 in a year",
-                "amount": 1000,
-                "end": (today_date + timedelta(days=365)).isoformat(),
-            },
-        ]
-        goal_types = [
-            {"value": "release", "label": "releases"},
-            {"value": "artist", "label": "artists"},
-            {"value": "label", "label": "labels"},
-        ]
-
-        return jsonify(
-            {
-                "active_goal": active_goal,
-                "past_goals": past_goals,
-                "current_pace": models.Release.added_per_day_this_year(),
-                "today": Util.today(),
-                "default_amount": 100,
-                "default_end": (today_date + timedelta(days=90)).isoformat(),
-                "goal_presets": goal_presets,
-                "goal_types": goal_types,
-            }
-        )
+        return jsonify(_goals_payload())
 
     @app.route("/api/goals", methods=["POST"])
     def api_add_goal():
         data = request.get_json() or {}
         if not data:
             return jsonify({"error": "/api/goals received an empty payload"}), 400
-        try:
-            goal = db.construct_item(model_name="goal", data_dict=data)
-            if not goal:
-                raise NameError("Construction of Goal object failed")
-        except Exception as e:
-            return jsonify({"error": friendly_message(e)}), 400
+        goal, error = _construct_goal_or_error(data)
+        if error:
+            return jsonify({"error": error}), 400
 
         db.insert(goal)
         return jsonify({"ok": True}), 201
