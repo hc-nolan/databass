@@ -1020,15 +1020,11 @@ class TestReleaseCreateNew:
 
     def test_create_new_returns_integer(self, mocker):
         """Test that create_new returns an integer ID"""
-        mock_construct = mocker.patch("databass.db.construct_item")
         mock_insert = mocker.patch("databass.db.models.insert")
         mocker.patch("databass.db.models.update")
-        mock_get_image = mocker.patch("databass.api.Util.get_image")
+        mock_get_image = mocker.patch("databass.api.image.get_image")
 
-        mock_release = mocker.Mock()
-        mock_release.id = 42
-        mock_construct.return_value = mock_release
-        mock_insert.return_value = mock_release.id
+        mock_insert.return_value = 42
         mock_get_image.return_value = "path/to/image.jpg"
 
         test_data = {
@@ -1050,11 +1046,10 @@ class TestReleaseCreateNew:
             Release.create_new(invalid_data)
 
     def test_create_new_constructs_release_correctly(self, mocker):
-        """Test that create_new calls construct_item with correct parameters"""
-        mock_construct = mocker.patch("databass.db.models.construct_item")
+        """Test that create_new constructs a Release with the given data before inserting"""
         mock_insert = mocker.patch("databass.db.models.insert")
-        mock_update = mocker.patch("databass.db.models.update")
-        mock_get_image = mocker.patch("databass.api.Util.get_image")
+        mocker.patch("databass.db.models.update")
+        mocker.patch("databass.api.image.get_image")
 
         test_data = {
             "name": "Test Release",
@@ -1065,20 +1060,24 @@ class TestReleaseCreateNew:
         }
 
         Release.create_new(test_data)
-        mock_construct.assert_called_once_with("release", test_data)
 
-    def test_create_new_missing_required_fields(self, mocker):
-        """Test that create_new handles missing required fields appropriately"""
-        mock_construct = mocker.patch("databass.db.models.construct_item")
-        mock_construct.side_effect = KeyError("Missing required field")
+        inserted_release = mock_insert.call_args[0][0]
+        assert isinstance(inserted_release, Release)
+        for key, value in test_data.items():
+            assert getattr(inserted_release, key) == value
 
-        test_data = {
-            "name": "Test Release"
-            # Missing other required fields
-        }
+    def test_create_new_missing_optional_fields(self, mocker):
+        """Test that create_new doesn't raise when optional fields are absent"""
+        mock_insert = mocker.patch("databass.db.models.insert")
+        mocker.patch("databass.db.models.update")
+        mock_get_image = mocker.patch("databass.api.image.get_image")
+        mock_insert.return_value = 1
 
-        with pytest.raises(KeyError, match="Missing required field"):
-            Release.create_new(test_data)
+        test_data = {"name": "Test Release"}
+
+        result = Release.create_new(test_data)
+        assert result == 1
+        mock_get_image.assert_not_called()
 
 
 class TestArtistOrLabelFrequencyHighest:
@@ -1581,10 +1580,6 @@ class TestGenreCreateGenres:
             # Mock the exists_by_name method to always return False
             mocker.patch.object(Genre, "exists_by_name", return_value=False)
 
-            # Mock construct_item to return a predictable Genre object
-            mock_construct = mocker.patch("databass.db.models.construct_item")
-            mock_construct.side_effect = lambda type, data: Genre(name=data["name"])
-
             # Mock insert to return a predictable ID
             mock_insert = mocker.patch(
                 "databass.db.models.insert", side_effect=[1, 2, 3]
@@ -1593,8 +1588,6 @@ class TestGenreCreateGenres:
             test_genres = "rock,jazz,electronic"
             result = Genre.create_genres(test_genres)
 
-            # Verify the mocks were called correctly
-            assert mock_construct.call_count == 3
             assert mock_insert.call_count == 3
 
             # Verify the correct genre names were used
@@ -1614,53 +1607,46 @@ class TestGenreCreateGenres:
     ):
         """Test that create_genres correctly splits the input string into individual genres"""
         with app.app_context():
-            mock_construct = mocker.patch("databass.db.models.construct_item")
-            mock_insert = mocker.patch("databass.db.models.insert")
+            mocker.patch.object(Genre, "exists_by_name", return_value=False)
+            mocker.patch("databass.db.models.insert")
 
-            Genre.create_genres(genres_string)
+            result = Genre.create_genres(genres_string)
 
-            for genre in expected_genres:
-                mock_construct.assert_any_call("genre", {"name": genre})
+            assert [genre.name for genre in result] == expected_genres
 
-    def test_create_genress_constructs_genre_objects_correctly(self, mocker, app):
+    def test_create_genres_constructs_genre_objects_correctly(self, mocker, app):
         """Test that create_genres constructs Genre objects with correct parameters"""
         with app.app_context():
-            mock_construct = mocker.patch("databass.db.models.construct_item")
-            mock_insert = mocker.patch("databass.db.models.insert")
+            mocker.patch.object(Genre, "exists_by_name", return_value=False)
+            mocker.patch("databass.db.models.insert")
 
-            test_release_id = 42
             test_genre = "rock"
-            Genre.create_genres(test_genre)
+            result = Genre.create_genres(test_genre)
 
-            mock_construct.assert_called_once_with("genre", {"name": test_genre})
+            assert len(result) == 1
+            assert isinstance(result[0], Genre)
+            assert result[0].name == test_genre
 
     def test_create_genres_inserts_constructed_objects(self, mocker, app):
         """Test that create_genres inserts the constructed Genre objects into the database"""
         with app.app_context():
-            mock_genre = mocker.Mock()
-            mock_construct = mocker.patch("databass.db.models.construct_item")
+            mocker.patch.object(Genre, "exists_by_name", return_value=False)
             mock_insert = mocker.patch("databass.db.models.insert")
-            mock_construct.return_value = mock_genre
 
-            Genre.create_genres("rock")
+            result = Genre.create_genres("rock")
 
-            mock_insert.assert_called_once_with(mock_genre)
+            mock_insert.assert_called_once_with(result[0])
 
     def test_create_genres_handles_whitespace(self, mocker, app):
         """Test that create_genres handles genres with whitespace correctly"""
         with app.app_context():
-            mock_construct = mocker.patch("databass.db.models.construct_item")
-            mock_insert = mocker.patch("databass.db.models.insert")
+            mocker.patch.object(Genre, "exists_by_name", return_value=False)
+            mocker.patch("databass.db.models.insert")
 
             test_genres = "rock , jazz , electronic"
-            Genre.create_genres(test_genres)
+            result = Genre.create_genres(test_genres)
 
-            expected_calls = [
-                mocker.call("genre", {"name": "rock "}),
-                mocker.call("genre", {"name": " jazz "}),
-                mocker.call("genre", {"name": " electronic"}),
-            ]
-            mock_construct.assert_has_calls(expected_calls)
+            assert [genre.name for genre in result] == ["rock ", " jazz ", " electronic"]
 
 
 class TestArtistAllReleases:

@@ -26,7 +26,7 @@ from sqlalchemy.orm import (
     selectinload,
 )
 from sqlalchemy.engine.row import Row
-from .operations import construct_item, insert, update
+from .operations import insert, update
 from .base import app_db
 
 
@@ -846,16 +846,16 @@ class Release(MusicBrainzEntity):
         """
         if not isinstance(data, dict):
             raise ValueError("data argument must be a dictionary")
-        from ..api import Util
+        from ..api import image
 
-        new_release = construct_item("release", data)
+        new_release = Release(**data)
         release_id = insert(new_release)
 
         # A failure to fetch the cover image shouldn't fail the whole
         # submission, since the release itself has already been saved.
         try:
             if data["image"] is not None:
-                Util.get_image(
+                image.get_image(
                     entity_type="release",
                     entity_id=release_id,
                     url=data["image"],
@@ -865,7 +865,7 @@ class Release(MusicBrainzEntity):
                     label_name=None,
                 )
             else:
-                Util.get_image(
+                image.get_image(
                     url=None,
                     entity_type="release",
                     entity_id=release_id,
@@ -1309,7 +1309,7 @@ class ArtistOrLabel(MusicBrainzEntity):
         Returns:
             int: The ID of the created or existing item.
         """
-        from ..api import MusicBrainz, Util
+        from ..api import MusicBrainz, image
 
         item_exists = cls.exists_by_mbid(mbid)
         if item_exists:
@@ -1323,12 +1323,12 @@ class ArtistOrLabel(MusicBrainzEntity):
                 item_search = MusicBrainz.label_search(name=name, mbid=mbid)
                 if item_search is None:
                     item_search = {"name": name}
-                new_item = construct_item(model_name="label", data_dict=item_search)
+                new_item = cls(**item_search)
             elif cls.__name__ == "Artist":
                 item_search = MusicBrainz.artist_search(name=name, mbid=mbid)
                 if item_search is None:
                     item_search = {"name": name}
-                new_item = construct_item(model_name="artist", data_dict=item_search)
+                new_item = cls(**item_search)
             else:
                 raise ValueError(
                     f"Unsupported class: {cls} - supported classes are Label and Artist"
@@ -1341,9 +1341,9 @@ class ArtistOrLabel(MusicBrainzEntity):
                     return item_exists.id
 
             item_id = insert(new_item)
-            # TODO: see if Util.get_image() can be refactored; instead of label_name and artist_name use item_name
+            # TODO: see if image.get_image() can be refactored; instead of label_name and artist_name use item_name
             if cls.__name__ == "Label":
-                Util.get_image(
+                image.get_image(
                     entity_type="label",
                     entity_id=item_id,
                     label_name=name,
@@ -1353,7 +1353,7 @@ class ArtistOrLabel(MusicBrainzEntity):
                     url=None,
                 )
             elif cls.__name__ == "Artist":
-                Util.get_image(
+                image.get_image(
                     entity_type="artist",
                     entity_id=item_id,
                     artist_name=name,
@@ -1362,7 +1362,7 @@ class ArtistOrLabel(MusicBrainzEntity):
                     label_name=None,
                     url=None,
                 )
-            # TODO: figure out a way to call Util.get_image() upon any insertion so it doesn't need to be manually called
+            # TODO: figure out a way to call image.get_image() upon any insertion so it doesn't need to be manually called
         return item_id
 
 
@@ -1619,7 +1619,7 @@ class Genre(Base):
                 out_genres.append(exists)
             else:
                 # new genre, create and insert
-                item = construct_item("genre", {"name": genre})
+                item = Genre(name=genre)
                 genre_id = insert(item)
                 item.id = genre_id
                 out_genres.append(item)
@@ -1638,7 +1638,7 @@ class Genre(Base):
             return exists
 
         # No existing entry; create one
-        genre = construct_item(model_name="genre", data_dict={"name": name})
+        genre = Genre(name=name)
         genre_id = insert(genre)
         genre.id = genre_id
         return genre

@@ -3,7 +3,8 @@ from sqlalchemy import extract, Integer
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.engine.row import Row
 from sqlalchemy.orm import query as sql_query
-from .operations import insert, construct_item
+from .operations import insert
+from .registry import construct_item
 from .models import Artist, Release, Label, MusicBrainzEntity, Base, Goal, Genre
 
 
