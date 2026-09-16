@@ -129,46 +129,6 @@ class Discogs:
         return None
 
     @staticmethod
-    def get_item_image_url(endpoint: str) -> Optional[str]:
-        """
-        Attempts to find the first square image URL from the provided Discogs API endpoint.
-
-        Args:
-            endpoint (str): The Discogs API endpoint to fetch image data from.
-
-        Returns:
-            Optional[str]:  The URL of the first square image found,
-                            or None if no square images are found.
-        """
-
-        try:
-            response = Discogs.request(endpoint)
-            results = response["results"]
-        except (TypeError, requests.RequestException):
-            return None
-        for item in results:
-            image_url = item.get("cover_image")
-            try:
-                # Attempt to determine image dimensions from the URL
-                # Should contain a string like /h:500/w:500/ to denote the height and width
-                # Below regex first extracts that entire substring;
-                # the next extract the height and width themselves
-
-                # IN: https://........../h:250/w:500/......  OUT: "/h:250/w:500"
-                dimensions = re.findall(DIMENSIONS_PATTERN, image_url)[0]
-                # IN: "/h:250/w:500"                         OUT: 250
-                height = int(re.sub(HEIGHT_PATTERN, r"\1", dimensions))
-                # IN: "/h:250/w:500"                         OUT: 500
-                width = int(re.sub(WIDTH_PATTERN, r"\1", dimensions))
-
-                # Make sure image is square; if not, try next result
-                if height == width:
-                    return image_url
-            except Exception:
-                continue
-        print("INFO: No square images found.")
-
-    @staticmethod
     def find_image(search_results: Dict[str, Any]) -> Optional[str]:
         """
         Finds the first square image from the provided search results.
