@@ -26,7 +26,7 @@ from sqlalchemy.orm import (
     selectinload,
 )
 from sqlalchemy.engine.row import Row
-from .operations import construct_item, insert
+from .operations import construct_item, insert, update
 from .base import app_db
 
 
@@ -846,7 +846,6 @@ class Release(MusicBrainzEntity):
         """
         if not isinstance(data, dict):
             raise ValueError("data argument must be a dictionary")
-        from .operations import insert, construct_item
         from ..api import Util
 
         new_release = construct_item("release", data)
@@ -1311,7 +1310,6 @@ class ArtistOrLabel(MusicBrainzEntity):
             int: The ID of the created or existing item.
         """
         from ..api import MusicBrainz, Util
-        from .operations import insert, construct_item
 
         item_exists = cls.exists_by_mbid(mbid)
         if item_exists:
@@ -1542,8 +1540,6 @@ class Goal(Base):
                 goal.update_goal()
                 if goal.completed:
                     # Goal is complete; updating db entry
-                    from .operations import update
-
                     update(goal)
                     newly_completed.append(goal)
         return newly_completed
@@ -1616,8 +1612,6 @@ class Genre(Base):
         This function splits the `genres` string on commas to get a list of individual genre names.
         For each genre name, it constructs a new `Genre` object with the genre name and inserts it.
         """
-        from .operations import insert, construct_item
-
         out_genres = []
         for genre in genres.split(","):
             exists = Genre.exists_by_name(genre)
