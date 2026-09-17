@@ -60,33 +60,6 @@ class Genre(Base):
             raise e
 
     @staticmethod
-    def create_genres(genres: str) -> list:
-        """
-        Create genres for a given release in the database, if they do not already exist.
-
-        Args:
-            genres (str): A comma-separated string of genre names to create.
-
-        Returns:
-            List of the genre objects
-
-        This function splits the `genres` string on commas to get a list of individual genre names.
-        For each genre name, it constructs a new `Genre` object with the genre name and inserts it.
-        """
-        out_genres = []
-        for genre in genres.split(","):
-            exists = Genre.exists_by_name(genre)
-            if exists:
-                out_genres.append(exists)
-            else:
-                # new genre, create and insert
-                item = Genre(name=genre)
-                genre_id = insert(item)
-                item.id = genre_id
-                out_genres.append(item)
-        return out_genres
-
-    @staticmethod
     def create_if_not_exists(name: str) -> Genre:
         """
         Create the given genre if it does not already exist

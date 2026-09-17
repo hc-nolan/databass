@@ -70,7 +70,9 @@ def _apply_release_edit(release_data: models.Release, edit_data: dict) -> models
     if genres:
         genre_names = genres if isinstance(genres, list) else genres.split(",")
         submit_data["genres"] = [
-            models.Genre.create_if_not_exists(g) for g in genre_names
+            models.Genre.create_if_not_exists(g.strip())
+            for g in genre_names
+            if g.strip()
         ]
 
     if "collab_artists" in edit_data:

@@ -90,7 +90,7 @@ def fetch_image(
     release_name: Optional[str],
     artist_name: Optional[str],
     label_name: Optional[str],
-):
+) -> Optional[str]:
     """Fetch a cover/entity image from CoverArtArchive (releases only) or
     Discogs, and write it to disk. For images already at a URL, use
     Util.get_image_from_url instead."""
@@ -121,13 +121,14 @@ def fetch_image(
             )
         except Exception as err:
             print(f"WARNING: Could not fetch {entity_type} image from Discogs: {err}")
-            return
+            return None
         img = discogs_image.get("image")
         img_type = discogs_image.get("type")
 
     if img is not None and img_type is not None:
-        write_image(
+        return write_image(
             entity_type=entity_type,
             img_bytes=img,
             img_type=img_type,
         )
+    return None

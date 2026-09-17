@@ -34,7 +34,7 @@ from sqlalchemy.orm import (
 from sqlalchemy.engine.row import Row
 
 from ..base import app_db
-from ..operations import insert
+from ..operations import insert, update
 from .base import MusicBrainzEntity
 from .associations import (
     label_artist_association,
@@ -652,15 +652,20 @@ class Release(MusicBrainzEntity):
         # submission, since the release itself has already been saved.
         try:
             if data["image"] is not None:
-                Util.get_image_from_url(entity_type="release", url=data["image"])
+                new_image = Util.get_image_from_url(
+                    entity_type="release", url=data["image"]
+                )
             else:
-                image.fetch_image(
+                new_image = image.fetch_image(
                     entity_type="release",
                     release_name=data["name"],
                     artist_name=data["artist_name"],
                     label_name=data["label_name"],
                     mbid=data["release_group_mbid"],
                 )
+            if new_image is not None:
+                new_release.image = new_image
+                update(new_release)
         except Exception as err:
             print(f"WARNING: Could not fetch image for release {release_id}: {err}")
 
@@ -1127,7 +1132,7 @@ class ArtistOrLabel(MusicBrainzEntity):
             item_id = insert(new_item)
             # TODO: see if image.fetch_image() can be refactored; instead of label_name and artist_name use item_name
             if cls.__name__ == "Label":
-                image.fetch_image(
+                new_image = image.fetch_image(
                     entity_type="label",
                     label_name=name,
                     mbid=None,
@@ -1135,13 +1140,18 @@ class ArtistOrLabel(MusicBrainzEntity):
                     artist_name=None,
                 )
             elif cls.__name__ == "Artist":
-                image.fetch_image(
+                new_image = image.fetch_image(
                     entity_type="artist",
                     artist_name=name,
                     mbid=None,
                     release_name=None,
                     label_name=None,
                 )
+            else:
+                new_image = None
+            if new_image is not None:
+                new_item.image = new_image
+                update(new_item)
             # TODO: figure out a way to call image.fetch_image() upon any insertion so it doesn't need to be manually called
         return item_id
 

@@ -23,8 +23,6 @@ class MbzParser:
             labelinfo = labelinfo_list[0].get("label", {})
         except (AttributeError, TypeError, IndexError):
             labelinfo = {}
-            label_id = ""
-            label_name = ""
 
         label_id = labelinfo.get("id")
         label_name = labelinfo.get("name")
@@ -42,7 +40,6 @@ class MbzParser:
             artist_name = artist_info.get("name")
             artist_mbid = artist_info.get("artist")["id"]
         except (AttributeError, TypeError, IndexError):
-            artist_info = {}
             artist_name = ""
             artist_mbid = ""
         return {"mbid": artist_mbid, "name": artist_name}
@@ -127,7 +124,6 @@ class MbzParser:
         begin_raw = lifespan.get("begin")
         end_raw = lifespan.get("end")
         begin = Util.to_date("begin", begin_raw)
-        begin = Util.to_date("begin", begin_raw)
         end = Util.to_date("end", end_raw)
 
         item = EntityInfo(
@@ -154,7 +150,9 @@ class MusicBrainz:
 
     @staticmethod
     def release_search(
-        release: str = None, artist: str = None, label: str = None
+        release: Optional[str] = None,
+        artist: Optional[str] = None,
+        label: Optional[str] = None,
     ) -> list[ReleaseInfo]:
         """
         Performs a search for music releases on the MusicBrainz API.

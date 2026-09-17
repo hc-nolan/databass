@@ -60,11 +60,8 @@ def delete(item_type: str, item_id: str) -> None:
     try:
         model = get_model(item_type)
         to_delete = app_db.session.query(model).where(model.id == item_id).one()
-        if to_delete:
-            app_db.session.delete(to_delete)
-            app_db.session.commit()
-        else:
-            raise ValueError(f"No {item_type} entry found for {item_id}")
+        app_db.session.delete(to_delete)
+        app_db.session.commit()
     except Exception as err:
         app_db.session.rollback()
         raise err

@@ -25,11 +25,6 @@ class Base(DeclarativeBase):
                 .filter(extract("year", cls.date_added) == current_year)
                 .count()
             )
-            if current_year == 2024:
-                # This section is required for backwards compatibility
-                results += (
-                    app_db.session.query(cls).filter(cls.date_added is None).count()
-                )
         except Exception:
             results = 0
         return results

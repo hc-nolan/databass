@@ -1056,7 +1056,7 @@ class TestReleaseCreateNew:
     def test_create_new_constructs_release_correctly(self, mocker):
         """Test that create_new constructs a Release with the given data before inserting"""
         mock_insert = mocker.patch("databass.db.models.catalog.insert")
-        mocker.patch("databass.api.image.fetch_image")
+        mocker.patch("databass.api.image.fetch_image", return_value=None)
 
         test_data = {
             "name": "Test Release",
@@ -1575,84 +1575,6 @@ class TestGoalCheckGoals:
         mocker.patch("databass.db.models.goal.update")
 
         assert Goal.check_goals() == []
-
-
-class TestGenreCreateGenres:
-    """Test suite for Genre.create_genres static method"""
-
-    def test_create_genres_creates_correct_number_of_genres(self, mocker, app):
-        """Test that create_genres creates the correct number of Genre objects from comma-separated string"""
-        with app.app_context():
-            # Mock the exists_by_name method to always return False
-            mocker.patch.object(Genre, "exists_by_name", return_value=False)
-
-            # Mock insert to return a predictable ID
-            mock_insert = mocker.patch(
-                "databass.db.models.genre.insert", side_effect=[1, 2, 3]
-            )
-
-            test_genres = "rock,jazz,electronic"
-            result = Genre.create_genres(test_genres)
-
-            assert mock_insert.call_count == 3
-
-            # Verify the correct genre names were used
-            assert [genre.name for genre in result] == ["rock", "jazz", "electronic"]
-
-    @pytest.mark.parametrize(
-        "genres_string,expected_genres",
-        [
-            ("rock,jazz", ["rock", "jazz"]),
-            ("electronic", ["electronic"]),
-            ("metal,punk,indie,folk", ["metal", "punk", "indie", "folk"]),
-            ("", [""]),
-        ],
-    )
-    def test_create_genres_splits_string_correctly(
-        self, mocker, genres_string, expected_genres, app
-    ):
-        """Test that create_genres correctly splits the input string into individual genres"""
-        with app.app_context():
-            mocker.patch.object(Genre, "exists_by_name", return_value=False)
-            mocker.patch("databass.db.models.genre.insert")
-
-            result = Genre.create_genres(genres_string)
-
-            assert [genre.name for genre in result] == expected_genres
-
-    def test_create_genres_constructs_genre_objects_correctly(self, mocker, app):
-        """Test that create_genres constructs Genre objects with correct parameters"""
-        with app.app_context():
-            mocker.patch.object(Genre, "exists_by_name", return_value=False)
-            mocker.patch("databass.db.models.genre.insert")
-
-            test_genre = "rock"
-            result = Genre.create_genres(test_genre)
-
-            assert len(result) == 1
-            assert isinstance(result[0], Genre)
-            assert result[0].name == test_genre
-
-    def test_create_genres_inserts_constructed_objects(self, mocker, app):
-        """Test that create_genres inserts the constructed Genre objects into the database"""
-        with app.app_context():
-            mocker.patch.object(Genre, "exists_by_name", return_value=False)
-            mock_insert = mocker.patch("databass.db.models.genre.insert")
-
-            result = Genre.create_genres("rock")
-
-            mock_insert.assert_called_once_with(result[0])
-
-    def test_create_genres_handles_whitespace(self, mocker, app):
-        """Test that create_genres handles genres with whitespace correctly"""
-        with app.app_context():
-            mocker.patch.object(Genre, "exists_by_name", return_value=False)
-            mocker.patch("databass.db.models.genre.insert")
-
-            test_genres = "rock , jazz , electronic"
-            result = Genre.create_genres(test_genres)
-
-            assert [genre.name for genre in result] == ["rock ", " jazz ", " electronic"]
 
 
 class TestArtistAllReleases:

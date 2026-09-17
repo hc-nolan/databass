@@ -9,7 +9,6 @@ Implements the main routes for the databass application, including
 from datetime import datetime, timedelta, date
 from typing import Optional
 from os.path import join, abspath
-from glob import glob
 from itertools import groupby
 import flask
 from flask import (
@@ -35,8 +34,16 @@ from . import stats2
 
 def image_exists(itemtype: str, itemid: int) -> bool:
     """Check whether a downloaded cover/artist/label image exists on disk."""
-    img_dir = abspath(join("databass", "static", "img", itemtype))
-    return bool(glob(join(img_dir, f"{itemid}.*")))
+    match itemtype:
+        case "artist":
+            item = models.Artist.exists_by_id(itemid)
+        case "label":
+            item = models.Label.exists_by_id(itemid)
+        case "release":
+            item = models.Release.exists_by_id(itemid)
+        case _:
+            return False
+    return bool(item and item.image)
 
 
 def initials(name: Optional[str], max_len: int = 4) -> str:
@@ -586,11 +593,8 @@ def register_routes(app):
                 item = models.Release.exists_by_id(itemid)
             case _:
                 return
-        img_dir = abspath(join("databass", "static", "img", itemtype))
-        img_pattern = join(img_dir, f"{item.id}.*")
-        img_match = glob(img_pattern)
-        if img_match:
-            img_path = img_match[0]
+        if item.image:
+            img_path = abspath(join("databass", item.image))
         else:
             img_path = "./static/img/none.png"
         resp = make_response(send_file(img_path))

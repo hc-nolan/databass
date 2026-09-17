@@ -21,8 +21,8 @@ def _apply_artist_edit(artist_data: Artist, edit_data: dict) -> Artist:
     image_url = edit_data.get("image")
     if image_url is not None:
         if "://" in image_url:
-            Util.get_image_from_url(entity_type="artist", url=image_url)
-            artist_data.image = image_url
+            new_image = Util.get_image_from_url(entity_type="artist", url=image_url)
+            artist_data.image = new_image
         else:
             print("Image not a URL. Skipping.")
 

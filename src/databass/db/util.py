@@ -101,7 +101,9 @@ def handle_submit_data(submit_data: dict) -> list[Goal]:
     if raw_genres:
         genre_names = raw_genres if isinstance(raw_genres, list) else raw_genres.split(",")
         for g in genre_names:
-            genres.append(Genre.create_if_not_exists(g))
+            g = g.strip()
+            if g:
+                genres.append(Genre.create_if_not_exists(g))
     submit_data["genres"] = genres
     note = submit_data.pop("note", None)
     release_id = Release.create_new(submit_data)

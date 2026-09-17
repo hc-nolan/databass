@@ -1,5 +1,5 @@
 import pytest
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, NoResultFound
 from databass.db.operations import insert, update
 from databass.db.registry import delete, get_model, construct_item
 from databass.db.models import Artist, Label, Release
@@ -365,6 +365,8 @@ class TestDelete:
         mock_db_session.rollback.assert_called_once()
 
     def test_delete_no_db_match(self, mock_db_session):
-        mock_db_session.query().where().one.return_value = None
-        with pytest.raises(ValueError, match="No release entry found"):
+        """.one() raises NoResultFound (rather than returning None) when nothing matches"""
+        mock_db_session.query().where().one.side_effect = NoResultFound()
+        with pytest.raises(NoResultFound):
             delete("release", 1)
+        mock_db_session.rollback.assert_called_once()
