@@ -1,8 +1,18 @@
+"""
+Release, ArtistOrLabel, Label, and Artist are kept together in one module
+rather than split further: Artist/Label subclass ArtistOrLabel (a hard,
+non-deferrable module-level dependency), ArtistOrLabel's stats methods
+(frequency_highest, average_ratings_bayesian, etc.) query Release columns
+extensively, and Release.dynamic_search looks up Artist/Label by name. These
+four classes form a single mutually-dependent unit reflecting the relational
+schema itself, not a design flaw - splitting them further would require
+either a deferred-import workaround or reintroducing a real cyclic import.
+"""
+
 from __future__ import annotations
 from datetime import datetime, date
 from typing import Any, Optional, List
 
-import sqlalchemy.exc
 from sqlalchemy import (
     String,
     Integer,
@@ -11,14 +21,10 @@ from sqlalchemy import (
     Date,
     func,
     extract,
-    distinct,
     or_,
-    Table,
-    Column,
     CheckConstraint,
 )
 from sqlalchemy.orm import (
-    DeclarativeBase,
     Mapped,
     mapped_column,
     relationship,
@@ -26,227 +32,19 @@ from sqlalchemy.orm import (
     selectinload,
 )
 from sqlalchemy.engine.row import Row
-from .operations import construct_item, insert
-from .base import app_db
 
-
-class Base(DeclarativeBase):
-    """Base class which all other database model classes are built from"""
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    date_added: Mapped[date | None] = mapped_column(default=date.today(), nullable=True)
-
-    @classmethod
-    def added_this_year(cls):
-        # Returns the number of entries where date_added is within current year
-        current_year = datetime.now().year
-        try:
-            results = (
-                app_db.session.query(cls)
-                .filter(extract("year", cls.date_added) == current_year)
-                .count()
-            )
-            if current_year == 2024:
-                # This section is required for backwards compatibility
-                results += (
-                    app_db.session.query(cls).filter(cls.date_added is None).count()
-                )
-        except Exception:
-            results = 0
-        return results
-
-    @classmethod
-    def added_per_day_this_year(cls):
-        """
-        Calculates the average number of listens per day so far this year.
-
-        Returns:
-            float: The average number of listens per day so far this year,
-            rounded to 2 decimal places.
-        """
-        days_this_year: int = date.today().timetuple().tm_yday
-        if days_this_year == 0:
-            return 0.0
-        count = cls.added_this_year()
-        result = count / days_this_year
-        return round(result, 2)
-
-    @classmethod
-    def exists_by_id(cls, item_id: int):
-        """
-        Check if an item exists in the database by its ID
-        :param item_id: Item's ID (primary key)
-        :return: The item, if it exists, or False if the item does not exist
-        """
-        try:
-            result = app_db.session.query(cls).filter(cls.id == item_id).one_or_none()
-            return result if result else None
-        except Exception:
-            return None
-
-    @classmethod
-    def exists_by_name(cls, name: str) -> Optional[Base]:
-        """
-        Check if an entry exists in the database by its name.
-
-        Args:
-            name (str): The name of the entry to check for.
-
-        Returns:
-            Optional[Base]: The entry if it exists, otherwise None.
-        """
-        if not name or not isinstance(name, str):
-            return None
-        try:
-            result = (
-                app_db.session.query(cls)
-                .filter(cls.name.ilike(f"%{name}%"))
-                .one_or_none()
-            )
-        except sqlalchemy.exc.MultipleResultsFound:
-            result = (
-                app_db.session.query(cls).filter(cls.name.ilike(f"%{name}%")).first()
-            )
-        return result
-
-
-# Relationship tables
-label_artist_association = Table(
-    "label_artist_association",
-    Base.metadata,
-    Column("label_id", ForeignKey("label.id", ondelete="CASCADE"), primary_key=True),
-    Column("artist_id", ForeignKey("artist.id", ondelete="CASCADE"), primary_key=True),
+from ..base import app_db
+from ..operations import insert, update
+from .base import MusicBrainzEntity
+from .associations import (
+    label_artist_association,
+    label_genre_association,
+    artist_genre_association,
+    release_genre_association,
+    release_collab_association,
 )
-
-label_genre_association = Table(
-    "label_genre_association",
-    Base.metadata,
-    Column("label_id", ForeignKey("label.id", ondelete="CASCADE"), primary_key=True),
-    Column("genre_id", ForeignKey("genre.id", ondelete="CASCADE"), primary_key=True),
-)
-
-artist_genre_association = Table(
-    "artist_genre_association",
-    Base.metadata,
-    Column("artist_id", ForeignKey("artist.id", ondelete="CASCADE"), primary_key=True),
-    Column("genre_id", ForeignKey("genre.id", ondelete="CASCADE"), primary_key=True),
-)
-
-release_genre_association = Table(
-    "release_genre_association",
-    Base.metadata,
-    Column("release_id", ForeignKey("release.id"), primary_key=True),
-    Column("genre_id", ForeignKey("genre.id"), primary_key=True),
-)
-
-# Manually-declared collaboration credits: lets a release be included in an
-# artist's discography in addition to (not instead of) its primary
-# Release.artist_id credit. Needed because collaborative releases are
-# inconsistently credited upstream (e.g. Sour Soul is credited solely to
-# BADBADNOTGOOD, but should also show up under Ghostface Killah).
-release_collab_association = Table(
-    "release_collab_association",
-    Base.metadata,
-    Column("release_id", ForeignKey("release.id", ondelete="CASCADE"), primary_key=True),
-    Column("artist_id", ForeignKey("artist.id", ondelete="CASCADE"), primary_key=True),
-)
-
-
-class MusicBrainzEntity(Base):
-    # Release and ArtistOrLabel are built from this prototype
-    __abstract__ = True
-
-    mbid: Mapped[str | None] = mapped_column(String, unique=True, nullable=True)
-    name: Mapped[str] = mapped_column(String())
-    image: Mapped[str | None] = mapped_column(String(), nullable=True)
-    country: Mapped[str | None] = mapped_column(String(), nullable=True)
-
-    @classmethod
-    def get_all(cls) -> list[Any]:
-        # Return all database entries for this class
-        results = app_db.session.query(cls).all()
-        return results
-
-    @classmethod
-    def total_count(cls) -> int:
-        # Return the count of all database entries for this class
-        try:
-            results = app_db.session.query(cls).count()
-            return results if isinstance(results, int) else None
-        except Exception:
-            return 0
-
-    @classmethod
-    def get_distinct_column_values(cls, column: str) -> list:
-        """
-        Get all distinct values of a given column
-        :param column: String representing the column's name
-        :return: List of the unique values of the given column
-        """
-        try:
-            attribute = getattr(cls, column)
-            return [value for (value,) in app_db.session.query(distinct(attribute))]
-        except AttributeError as e:
-            raise e
-
-    @classmethod
-    def exists_by_mbid(cls, mbid: str) -> Optional[MusicBrainzEntity]:
-        """
-        Check if a MusicBrainzEntity exists in the database by its MBID (MusicBrainz ID).
-
-        Args:
-            mbid (str): The MBID of the MusicBrainzEntity to check for.
-
-        Returns:
-            Optional[MusicBrainzEntity]: The MusicBrainzEntity if it exists, otherwise None.
-        """
-        if not mbid or not isinstance(mbid, str):
-            return None
-        try:
-            result = app_db.session.query(cls).filter(cls.mbid == mbid).one_or_none()
-        except Exception:
-            app_db.session.rollback()
-            return None
-        if result:
-            return result
-        return None
-
-    @classmethod
-    def name_from_id(cls, item_id: int) -> Optional[MusicBrainzEntity.name]:
-        """
-        Get the name of a MusicBrainzEntity from its database ID.
-
-        Args:
-            item_id (int): The ID of the MusicBrainzEntity to get the name of.
-
-        Returns:
-            Optional[MusicBrainzEntity.name]: The name (str) of the MusicBrainzEntity,
-            or None if no entry with the specified ID is found.
-        """
-        if not isinstance(item_id, int) or item_id <= 0:
-            return None
-        result = app_db.session.query(cls.name).where(cls.id == item_id).one_or_none()
-        return result[0] if result is not None else None
-
-    @classmethod
-    def id_by_matching_name(cls, name: str) -> list[MusicBrainzEntity.id]:
-        """
-        Get all MusicBrainzEntity IDs of a given type (Release, Artist, Label)
-        where the name matches the `name` argument.
-
-        Args:
-            name (str): The name to match on.
-
-        Returns:
-            list[MusicBrainzEntity.id]: A list of MusicBrainzEntity IDs (int) with names
-                                        that match the `name` argument.
-        """
-        if not isinstance(name, str):
-            return []
-        result = app_db.session.query(cls.id).filter(cls.name.ilike(f"%{name}%")).all()
-        # .all() returns a list of tuples like [(1,), (2,)]
-        # below list comprehension unpacks it to [1, 2]
-        return [r[0] for r in result]
+from .query_utils import apply_comparison_filter, mean_avg_and_count, bayesian_avg
+from .review import Review
 
 
 class Release(MusicBrainzEntity):
@@ -708,7 +506,6 @@ class Release(MusicBrainzEntity):
         """
         if not isinstance(data, dict):
             raise ValueError("Search criteria must be a dictionary")
-        from .util import apply_comparison_filter
 
         query = app_db.session.query(cls)
         search_keys = [
@@ -846,35 +643,29 @@ class Release(MusicBrainzEntity):
         """
         if not isinstance(data, dict):
             raise ValueError("data argument must be a dictionary")
-        from .operations import insert, construct_item
-        from ..api import Util
+        from ...api import Util, image
 
-        new_release = construct_item("release", data)
+        new_release = Release(**data)
         release_id = insert(new_release)
 
         # A failure to fetch the cover image shouldn't fail the whole
         # submission, since the release itself has already been saved.
         try:
             if data["image"] is not None:
-                Util.get_image(
-                    entity_type="release",
-                    entity_id=release_id,
-                    url=data["image"],
-                    mbid=None,
-                    release_name=None,
-                    artist_name=None,
-                    label_name=None,
+                new_image = Util.get_image_from_url(
+                    entity_type="release", url=data["image"]
                 )
             else:
-                Util.get_image(
-                    url=None,
+                new_image = image.fetch_image(
                     entity_type="release",
-                    entity_id=release_id,
                     release_name=data["name"],
                     artist_name=data["artist_name"],
                     label_name=data["label_name"],
                     mbid=data["release_group_mbid"],
                 )
+            if new_image is not None:
+                new_release.image = new_image
+                update(new_release)
         except Exception as err:
             print(f"WARNING: Could not fetch image for release {release_id}: {err}")
 
@@ -1177,8 +968,6 @@ class ArtistOrLabel(MusicBrainzEntity):
         if entity_count == 0:
             return []
 
-        from .util import mean_avg_and_count, bayesian_avg
-
         mean_avg, mean_count = mean_avg_and_count(entities)
         items = []
         for entity in entities:
@@ -1260,7 +1049,6 @@ class ArtistOrLabel(MusicBrainzEntity):
         """
         if not isinstance(filters, dict):
             raise ValueError("filters must be a dictionary")
-        from .util import apply_comparison_filter
 
         query = app_db.session.query(cls)
         search_keys = ["name", "begin_date", "end_date", "country", "type"]
@@ -1310,8 +1098,7 @@ class ArtistOrLabel(MusicBrainzEntity):
         Returns:
             int: The ID of the created or existing item.
         """
-        from ..api import MusicBrainz, Util
-        from .operations import insert, construct_item
+        from ...api import MusicBrainz, image
 
         item_exists = cls.exists_by_mbid(mbid)
         if item_exists:
@@ -1325,12 +1112,12 @@ class ArtistOrLabel(MusicBrainzEntity):
                 item_search = MusicBrainz.label_search(name=name, mbid=mbid)
                 if item_search is None:
                     item_search = {"name": name}
-                new_item = construct_item(model_name="label", data_dict=item_search)
+                new_item = cls(**item_search)
             elif cls.__name__ == "Artist":
                 item_search = MusicBrainz.artist_search(name=name, mbid=mbid)
                 if item_search is None:
                     item_search = {"name": name}
-                new_item = construct_item(model_name="artist", data_dict=item_search)
+                new_item = cls(**item_search)
             else:
                 raise ValueError(
                     f"Unsupported class: {cls} - supported classes are Label and Artist"
@@ -1343,28 +1130,29 @@ class ArtistOrLabel(MusicBrainzEntity):
                     return item_exists.id
 
             item_id = insert(new_item)
-            # TODO: see if Util.get_image() can be refactored; instead of label_name and artist_name use item_name
+            # TODO: see if image.fetch_image() can be refactored; instead of label_name and artist_name use item_name
             if cls.__name__ == "Label":
-                Util.get_image(
+                new_image = image.fetch_image(
                     entity_type="label",
-                    entity_id=item_id,
                     label_name=name,
                     mbid=None,
                     release_name=None,
                     artist_name=None,
-                    url=None,
                 )
             elif cls.__name__ == "Artist":
-                Util.get_image(
+                new_image = image.fetch_image(
                     entity_type="artist",
-                    entity_id=item_id,
                     artist_name=name,
                     mbid=None,
                     release_name=None,
                     label_name=None,
-                    url=None,
                 )
-            # TODO: figure out a way to call Util.get_image() upon any insertion so it doesn't need to be manually called
+            else:
+                new_image = None
+            if new_image is not None:
+                new_item.image = new_image
+                update(new_item)
+            # TODO: figure out a way to call image.fetch_image() upon any insertion so it doesn't need to be manually called
         return item_id
 
 
@@ -1415,254 +1203,3 @@ class Artist(ArtistOrLabel):
         """
         combined = dict.fromkeys([*self.releases, *self.collab_releases])
         return sorted(combined, key=lambda r: (r.listen_date, r.id), reverse=True)
-
-
-class Goal(Base):
-    __tablename__ = "goal"
-    start: Mapped[datetime] = mapped_column(DateTime)
-    end: Mapped[datetime] = mapped_column(DateTime)
-    completed: Mapped[datetime | None] = mapped_column(DateTime)
-    type: Mapped[str] = mapped_column(String)  # i.e. release, album, label
-    amount: Mapped[int] = mapped_column(Integer)
-
-    @property
-    def new_releases_since_start_date(self):
-        """
-        Returns the count of releases with a listen_date within the Goal's
-        [start, end] window. This property is used to determine if the Goal
-        has been met, based on the number of new releases logged during it.
-        """
-        return (
-            app_db.session.query(func.count(Release.id))
-            .filter(Release.listen_date >= self.start, Release.listen_date <= self.end)
-            .scalar()
-        )
-
-    @property
-    def new_artists_since_start_date(self):
-        """
-        Returns the count of distinct artists with a release logged (listen_date
-        within the Goal's [start, end] window).
-        """
-        return (
-            app_db.session.query(func.count(distinct(Release.artist_id)))
-            .filter(Release.listen_date >= self.start, Release.listen_date <= self.end)
-            .scalar()
-        )
-
-    @property
-    def new_labels_since_start_date(self):
-        """
-        Returns the count of distinct labels with a release logged (listen_date
-        within the Goal's [start, end] window).
-        """
-        return (
-            app_db.session.query(func.count(distinct(Release.label_id)))
-            .filter(Release.listen_date >= self.start, Release.listen_date <= self.end)
-            .scalar()
-        )
-
-    @property
-    def current_amount(self):
-        """
-        Returns the current progress towards the Goal, using the property matching its `type`.
-        """
-        match self.type:
-            case "artist":
-                return self.new_artists_since_start_date
-            case "label":
-                return self.new_labels_since_start_date
-            case _:
-                return self.new_releases_since_start_date
-
-    def update_goal(self):
-        """
-        Updates the `end_actual` attribute of the `Goal` instance if the current amount
-        since the goal's `start_date` is greater than or equal to the `amount` attribute.
-
-        This method is used to check if a goal has been met, based on the current amount since
-        the goal's start date. If the goal has been met, the `end_actual` attribute is updated
-        to the current time.
-        """
-        print(f"Target amount: {self.amount} - Actual amount: {self.current_amount}")
-        if self.type in ("release", "artist", "label"):
-            if self.current_amount >= self.amount:
-                print("Updating end_actual to current time")
-                self.completed = datetime.now()
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-        for key, value in kwargs.items():
-            setattr(self, key, value)
-
-    @classmethod
-    def get_incomplete(cls) -> list[Goal] | None:
-        """
-        Query database for goals without an end_actual date, meaning they have not been completed
-        Returns a list of the goals if found; none otherwise
-        """
-        try:
-            query = app_db.session.query(cls).where(cls.completed.is_(None))
-            results = query.all()
-        except Exception:
-            return []
-        if results:
-            return results
-        return []
-
-    @classmethod
-    def get_past(cls) -> list[Goal]:
-        """
-        Query database for goals that are either completed, or incomplete with an
-        end date in the past (i.e. missed). Returns the goals newest-ended first.
-        """
-        try:
-            query = (
-                app_db.session.query(cls)
-                .where(or_(cls.completed.isnot(None), cls.end < datetime.now()))
-                .order_by(cls.end.desc())
-            )
-            return query.all()
-        except Exception:
-            return []
-
-    @classmethod
-    def check_goals(cls) -> list[Goal]:
-        """
-        Checks all incomplete goals and updates them if the goal has been met.
-
-        This method retrieves all incomplete goals from the database, then for each goal it calls the `update_goal()` method to check if the goal has been met based on the number of new releases since the goal's start date. If the goal has been met, the `end_actual` attribute is updated to the current time, and the updated goal is saved to the database.
-
-        Returns the list of goals that were newly completed by this check.
-        """
-        newly_completed = []
-        active_goals = cls.get_incomplete()
-        if active_goals is not None:
-            for goal in active_goals:
-                goal.update_goal()
-                if goal.completed:
-                    # Goal is complete; updating db entry
-                    from .operations import update
-
-                    update(goal)
-                    newly_completed.append(goal)
-        return newly_completed
-
-
-class Review(Base):
-    __tablename__ = "review"
-    timestamp: Mapped[date] = mapped_column(DateTime, default=func.now())
-    text: Mapped[str] = mapped_column(String)
-    release_id: Mapped[int] = mapped_column(ForeignKey("release.id"))
-
-    release = relationship("Release", back_populates="reviews")
-
-
-class Genre(Base):
-    __tablename__ = "genre"
-    name: Mapped[str] = mapped_column(String, unique=True)
-
-    main_genres = relationship("Release", back_populates="main_genre")
-    releases = relationship(
-        "Release", secondary=release_genre_association, back_populates="genres"
-    )
-    artists = relationship(
-        "Artist", secondary=artist_genre_association, back_populates="genres"
-    )
-    labels = relationship(
-        "Label", secondary=label_genre_association, back_populates="genres"
-    )
-
-    @classmethod
-    def top_by_release_count(cls, limit: int = 6) -> list[dict]:
-        """
-        Top genres by number of releases logged under them as their main
-        genre, all-time, most-listened first.
-        """
-        rows = (
-            app_db.session.query(cls.name, func.count(Release.id).label("count"))
-            .join(Release, Release.main_genre_id == cls.id)
-            .group_by(cls.name)
-            .order_by(func.count(Release.id).desc())
-            .limit(limit)
-            .all()
-        )
-        return [{"name": name, "count": count} for name, count in rows]
-
-    @classmethod
-    def get_distinct_column_values(cls, column: str) -> list:
-        """
-        Get all distinct values of a given column
-        :param column: String representing the column's name
-        :return: List of the unique values of the given column
-        """
-        try:
-            attribute = getattr(cls, column)
-            return [value for (value,) in app_db.session.query(distinct(attribute))]
-        except AttributeError as e:
-            raise e
-
-    @staticmethod
-    def create_genres(genres: str) -> list:
-        """
-        Create genres for a given release in the database, if they do not already exist.
-
-        Args:
-            genres (str): A comma-separated string of genre names to create.
-
-        Returns:
-            List of the genre objects
-
-        This function splits the `genres` string on commas to get a list of individual genre names.
-        For each genre name, it constructs a new `Genre` object with the genre name and inserts it.
-        """
-        from .operations import insert, construct_item
-
-        out_genres = []
-        for genre in genres.split(","):
-            exists = Genre.exists_by_name(genre)
-            if exists:
-                out_genres.append(exists)
-            else:
-                # new genre, create and insert
-                item = construct_item("genre", {"name": genre})
-                genre_id = insert(item)
-                item.id = genre_id
-                out_genres.append(item)
-        return out_genres
-
-    @staticmethod
-    def create_if_not_exists(name: str) -> Genre:
-        """
-        Create the given genre if it does not already exist
-
-        Returns:
-            Genre object; either newly created or existing
-        """
-        exists = Genre.exists_by_name(name)
-        if exists:
-            return exists
-
-        # No existing entry; create one
-        genre = construct_item(model_name="genre", data_dict={"name": name})
-        genre_id = insert(genre)
-        genre.id = genre_id
-        return genre
-
-    @classmethod
-    def exists_by_name(cls, name: str) -> Optional[Genre]:
-        """
-        Check if an entry exists in the database by its name.
-        This is separate from Base.exists_by_name because we want to match on the full genre name
-        rather than partial match.
-
-        Args:
-            name (str): The name of the entry to check for.
-
-        Returns:
-            Optional[Genre]: The entry if it exists, otherwise None.
-        """
-        if not name or not isinstance(name, str):
-            return None
-        result = app_db.session.query(cls).filter(cls.name == name).one_or_none()
-        return result

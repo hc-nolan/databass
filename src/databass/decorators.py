@@ -20,7 +20,10 @@ def load_or_404(model, url_param, inject_as=None):
         @wraps(f)
         def wrapper(*args, **kwargs):
             item_id = kwargs.pop(url_param)
-            instance = model.exists_by_id(int(item_id))
+            try:
+                instance = model.exists_by_id(int(item_id))
+            except (TypeError, ValueError):
+                instance = None
             if not instance:
                 message = f"No {model.__name__.lower()} with id {item_id} found."
                 if request.path.startswith("/api/"):

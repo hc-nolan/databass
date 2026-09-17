@@ -1,6 +1,7 @@
 import pytest
-from sqlalchemy.exc import IntegrityError
-from databass.db.operations import insert, update, delete, get_model, construct_item
+from sqlalchemy.exc import IntegrityError, NoResultFound
+from databass.db.operations import insert, update
+from databass.db.registry import delete, get_model, construct_item
 from databass.db.models import Artist, Label, Release
 
 
@@ -69,7 +70,7 @@ class TestConstructItem:
         ],
     )
     def test_construct_item_success(self, model, data_dict, mocker, mock_model_fixture):
-        mocker.patch("databass.db.operations.get_model", side_effect=mock_model_fixture)
+        mocker.patch("databass.db.registry.get_model", side_effect=mock_model_fixture)
         item = construct_item(model_name=model, data_dict=data_dict)
         expected_class = mock_model_fixture(model)
         name = "Test " + model.capitalize()
@@ -81,7 +82,7 @@ class TestConstructItem:
         Test for successful handling of a model name not found in valid_models
         """
         mock_get_model = mocker.patch(
-            "databass.db.operations.get_model", side_effect=mock_model_fixture
+            "databass.db.registry.get_model", side_effect=mock_model_fixture
         )
         data_dict = {"name": "asdf"}
         bad_name = "asdf"
@@ -364,6 +365,8 @@ class TestDelete:
         mock_db_session.rollback.assert_called_once()
 
     def test_delete_no_db_match(self, mock_db_session):
-        mock_db_session.query().where().one.return_value = None
-        with pytest.raises(ValueError, match="No release entry found"):
+        """.one() raises NoResultFound (rather than returning None) when nothing matches"""
+        mock_db_session.query().where().one.side_effect = NoResultFound()
+        with pytest.raises(NoResultFound):
             delete("release", 1)
+        mock_db_session.rollback.assert_called_once()

@@ -1,88 +1,11 @@
-from typing import Type
-from sqlalchemy.orm import query as sql_query
-from .operations import insert, construct_item
-
-# from .models import *
-# above imports all of the below
-from sqlalchemy import extract, Integer
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.engine.row import Row
-from .models import Artist, Release, Label, MusicBrainzEntity, Base, Goal, Genre, Review
+from .operations import insert
+from .registry import construct_item
+from .models import Artist, Release, Label, Base, Goal, Genre
 
 
 def get_valid_models():
     return [cls.__name__.lower() for cls in Base.__subclasses__()]
-
-
-def apply_comparison_filter(
-    query, model: Type[MusicBrainzEntity], key: str, operator: str, value: str
-) -> sql_query:
-    """
-    Used by dynamic_search to perform comparisons on begin, end, year, or rating
-    :param query: An SQLAlchemy query class
-    :param model: The database model class to filter on
-    :param key: The column to filter on - begin_date or end_date
-    :param operator: Denotes the comparison to perform
-    :param value: The value to compare against
-    :return: Newly constructed query
-    """
-    attribute = getattr(model, key)
-    if not attribute:
-        raise NameError(f"No attribute '{key}' found in model {model}")
-    try:
-        val = int(value)
-    except TypeError:
-        raise TypeError(f"Value must be an integer, got {type(value)}: {value}")
-
-    if operator not in ["<", "=", ">"]:
-        raise ValueError(f"Unrecognized operator value for year_comparison: {operator}")
-
-    if key in ("begin", "end"):
-        query = query.filter(extract("year", attribute).cast(Integer).op(operator)(val))
-    elif key == "rating":
-        query = query.filter(Release.rating.op(operator)(value))
-    elif key == "year":
-        query = query.filter(Release.year.op(operator)(value))
-    return query
-
-
-# Utility function to calculate the mean average rating and total release count
-# for releases associated with a specific Label/Artist
-def mean_avg_and_count(entities: list[Row]) -> (int, int):
-    """
-    :param entities: List of SQLAlchemy Rows; returned from average_ratings_and_total_counts()
-    :return: A tuple representing the mean average release rating and mean release count
-    """
-    avg = count = 0
-    total = len(entities)
-    for item in entities:
-        try:
-            avg += int(item.average_rating)
-            count += int(item.release_count)
-        except AttributeError:
-            # TODO: consider logging info about the erroring release
-            # Have not encountered this in practice, but if it is encountered
-            # it means there is a corrupt entry
-            total -= 1
-
-    mean_avg = avg / total
-    mean_count = count / total
-    return mean_avg, mean_count
-
-
-# Utility function used to calculate Bayesian average
-def bayesian_avg(item_weight: float, item_avg: float, mean_avg: float) -> float:
-    """
-    Calculates the Bayesian average rating for a given item weight and average
-    :param item_weight: Float representing the item's weight for the formula;
-                        calculated as: count / (count + mean count)
-    :param item_avg: Item's average rating
-    :param mean_avg: Mean average release rating for all database entries
-    :return: Float representing the Bayesian average rating for releases associated with this item
-    """
-    if not item_weight or not item_avg or not mean_avg:
-        raise ValueError("Input missing one of the required values")
-    return item_weight * item_avg + (1 - item_weight) * mean_avg
 
 
 def get_all_stats():
@@ -117,20 +40,14 @@ def ensure_db_placeholders():
 
     This function ensures these entries exist.
     """
-    label = Label()
-    label.id = 0
-    label.name = "Unknown"
-    try:
-        insert(label)
-    except IntegrityError:
-        pass
-    artist = Artist()
-    artist.id = 0
-    artist.name = "Unknown"
-    try:
-        insert(artist)
-    except IntegrityError:
-        pass
+    for model in (Label, Artist):
+        placeholder = model()
+        placeholder.id = 0
+        placeholder.name = "Unknown"
+        try:
+            insert(placeholder)
+        except IntegrityError:
+            pass
 
 
 def handle_submit_data(submit_data: dict) -> list[Goal]:
@@ -184,7 +101,9 @@ def handle_submit_data(submit_data: dict) -> list[Goal]:
     if raw_genres:
         genre_names = raw_genres if isinstance(raw_genres, list) else raw_genres.split(",")
         for g in genre_names:
-            genres.append(Genre.create_if_not_exists(g))
+            g = g.strip()
+            if g:
+                genres.append(Genre.create_if_not_exists(g))
     submit_data["genres"] = genres
     note = submit_data.pop("note", None)
     release_id = Release.create_new(submit_data)

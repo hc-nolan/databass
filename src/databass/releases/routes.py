@@ -40,10 +40,8 @@ def _apply_release_edit(release_data: models.Release, edit_data: dict) -> models
 
     image = edit_data.get("image")
     if image:
-        if "http" and "://" in image:
-            new_image = Util.get_image(
-                entity_type="release", entity_id=release_data.id, url=image
-            )
+        if "://" in image:
+            new_image = Util.get_image_from_url(entity_type="release", url=image)
             submit_data["image"] = new_image
         else:
             print("Image not a URL. Skipping.")
@@ -72,7 +70,9 @@ def _apply_release_edit(release_data: models.Release, edit_data: dict) -> models
     if genres:
         genre_names = genres if isinstance(genres, list) else genres.split(",")
         submit_data["genres"] = [
-            models.Genre.create_if_not_exists(g) for g in genre_names
+            models.Genre.create_if_not_exists(g.strip())
+            for g in genre_names
+            if g.strip()
         ]
 
     if "collab_artists" in edit_data:
@@ -147,106 +147,15 @@ def edit(release_data):
         )
     if request.method == "POST":
         edit_data = request.form.to_dict()
-        submit_data = {}
-
-        # image
+        edit_data["genres"] = request.form.getlist("genres")
+        edit_data["collab_artists"] = request.form.getlist("collab_artists")
         try:
-            if edit_data["image"]:
-                image = edit_data["image"]
-                if "http" and "://" in image:
-                    # If image is a URL, download it
-                    try:
-                        new_image = Util.get_image(
-                            entity_type="release", entity_id=release_data.id, url=image
-                        )
-                        submit_data["image"] = new_image
-                    except Exception as err:
-                        flash(f"Could not use image URL: {friendly_message(err)}")
-                        return redirect("/error", code=302)
-                else:
-                    print("Image not a URL. Skipping.")
-        except KeyError:
-            pass
-
-        # release year
-        try:
-            year = edit_data["year"]
-            if year:
-                submit_data["year"] = year
-        except KeyError:
-            pass
-
-        # listen date
-        try:
-            listen_date = edit_data["listen_date"]
-            if listen_date:
-                submit_data["listen_date"] = datetime.strptime(listen_date, "%Y-%m-%d")
-        except KeyError:
-            pass
-
-        # rating
-        try:
-            rating = edit_data["rating"]
-            if rating:
-                submit_data["rating"] = rating
-        except KeyError:
-            pass
-
-        # genre
-        try:
-            main_genre = edit_data["main_genre"]
-            if main_genre:
-                genre = models.Genre.create_if_not_exists(main_genre)
-                submit_data["main_genre"] = genre
-        except KeyError:
-            pass
-
-        # country
-        try:
-            country = edit_data["country"]
-            if country:
-                submit_data["country"] = country
-        except KeyError:
-            pass
-
-        # genres
-        try:
-            genre_names = [
-                g.strip() for g in request.form.getlist("genres") if g.strip()
-            ]
-            if genre_names:
-                submit_data["genres"] = [
-                    models.Genre.create_if_not_exists(g) for g in genre_names
-                ]
-        except KeyError:
-            pass
-
-        # collab artists: additional artists whose discography should
-        # include this release, alongside its primary artist
-        try:
-            collab_names = [
-                n.strip() for n in request.form.getlist("collab_artists") if n.strip()
-            ]
-            collab_objs = [
-                models.Artist.exists_by_id(models.Artist.create_if_not_exist(n))
-                for n in collab_names
-            ]
-            submit_data["collab_artists"] = collab_objs
-        except KeyError:
-            pass
-
-        updated_release = db.construct_item("release", submit_data)
-        # construct_item() will produce a unique ID primary key, so we need to set it to the original one for update() to work
-        updated_release.id = release_data.id
-        # carry over the fields that don't change from the release we already loaded
-        updated_release.artist_id = release_data.artist_id
-        updated_release.label_id = release_data.label_id
-        updated_release.runtime = release_data.runtime
-        updated_release.track_count = release_data.track_count
-        try:
-            db.update(updated_release)
+            _apply_release_edit(release_data, edit_data)
         except IntegrityError as err:
             flash(integrity_error_message(err))
+            return redirect("/error", code=302)
+        except Exception as err:  # pylint: disable=broad-exception-caught
+            flash(friendly_message(err))
             return redirect("/error", code=302)
         return redirect("/", 302)
 

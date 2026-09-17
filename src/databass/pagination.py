@@ -48,6 +48,5 @@ class Pager:
             page=current_page,
             total=len(data),
             search=False,
-            # record_name='latest_releases'
         )
         return paged_data, flask_pagination

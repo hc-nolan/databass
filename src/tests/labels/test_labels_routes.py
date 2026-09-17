@@ -76,7 +76,7 @@ class TestEditLabel:
     # Tests for /label/<id>/edit
     def test_edit_unsupported_image_url_flashes_error(self, client, mocker, existing_label):
         mocker.patch(
-            "databass.labels.routes.Util.get_image",
+            "databass.labels.routes.Util.get_image_from_url",
             side_effect=ValueError(
                 "ERROR: No supported image type found in URL: https://example.com/page"
             ),
@@ -96,7 +96,7 @@ class TestApiEditLabel:
     # Tests for PUT /api/label/<id>
     def test_api_edit_unsupported_image_url_returns_400(self, client, mocker, existing_label):
         mocker.patch(
-            "databass.labels.routes.Util.get_image",
+            "databass.labels.routes.Util.get_image_from_url",
             side_effect=ValueError(
                 "ERROR: No supported image type found in URL: https://example.com/page"
             ),

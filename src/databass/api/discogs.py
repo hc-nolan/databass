@@ -3,7 +3,7 @@ Implements Discogs API-related functions via Discogs class methods
 """
 
 from os import getenv
-from typing import Dict, Optional, Any
+from typing import Dict, Optional, Any, Literal
 from urllib.parse import urljoin, urlencode
 import time
 import re
@@ -20,6 +20,9 @@ DIMENSIONS_PATTERN = r"/h:\d+/w:\d+/"
 HEIGHT_PATTERN = r"/h:(\d+)/.*"
 WIDTH_PATTERN = r".*/w:(\d+)/.*"
 DISAMBIG_PATTERN = r"\s*\(\d+\)\s*$"
+FORBIDDEN_FORMATS = ["Blu-ray"]
+
+valid_entity_types = Literal["release", "artist", "label"]
 
 
 class Discogs:
@@ -76,7 +79,9 @@ class Discogs:
         raise requests.exceptions.RequestException(f"Status code != 200: {resp}")
 
     @staticmethod
-    def get_item_id(name: str, item_type: str, artist: str = None) -> Optional[str]:
+    def get_item_id(
+        name: str, item_type: str, artist: Optional[str] = None
+    ) -> Optional[str]:
         """
         Gets the ID for the specified item type and name.
 
@@ -91,10 +96,11 @@ class Discogs:
         if not name or not item_type:
             return None
         print(f"Getting ID for {item_type}: {name}")
-        if item_type == "release":
-            query_params = {"q": artist, "type": "release", "release_title": name}
-        else:
-            query_params = {"q": name, "type": item_type}
+        query_params = (
+            {"q": artist, "type": "release", "release_title": name}
+            if item_type == "release"
+            else {"q": name, "type": item_type}
+        )
         encoded_params = urlencode(query_params)
         endpoint = f"/database/search?{encoded_params}"
         print(f"Search endpoint: {endpoint}")
@@ -106,66 +112,25 @@ class Discogs:
 
         item_id = None
         results = res.get("results", [])
-        for result in results:
-            result_title = result.get("title")
-            if result_title is None:
-                continue
+        results_filtered = [r for r in results if r.get("title")]
+        results_filtered = [
+            r
+            for r in results_filtered
+            if not any(fmt in FORBIDDEN_FORMATS for fmt in (r.get("format") or []))
+        ]
+        for result in results_filtered:
             # remove disambiguation chars
             # e.g. "Future (4)" -> "Future"
-            result_title = re.sub(DISAMBIG_PATTERN, "", result_title)
+            result_title = re.sub(DISAMBIG_PATTERN, "", result.get("title"))
             if result_title == name:
-                format = result.get("format", [])
-                if "Blu-ray" in format:
-                    continue
-                else:
-                    item_id = result.get("id")
-                    break
+                item_id = result.get("id")
+                break
 
         if item_id:
             print(f"ID for {item_type} {name}: {item_id}")
             return item_id
 
         return None
-
-    @staticmethod
-    def get_item_image_url(endpoint: str) -> Optional[str]:
-        """
-        Attempts to find the first square image URL from the provided Discogs API endpoint.
-
-        Args:
-            endpoint (str): The Discogs API endpoint to fetch image data from.
-
-        Returns:
-            Optional[str]:  The URL of the first square image found,
-                            or None if no square images are found.
-        """
-
-        try:
-            response = Discogs.request(endpoint)
-            results = response["results"]
-        except (TypeError, requests.RequestException):
-            return None
-        for item in results:
-            image_url = item.get("cover_image")
-            try:
-                # Attempt to determine image dimensions from the URL
-                # Should contain a string like /h:500/w:500/ to denote the height and width
-                # Below regex first extracts that entire substring;
-                # the next extract the height and width themselves
-
-                # IN: https://........../h:250/w:500/......  OUT: "/h:250/w:500"
-                dimensions = re.findall(DIMENSIONS_PATTERN, image_url)[0]
-                # IN: "/h:250/w:500"                         OUT: 250
-                height = int(re.sub(HEIGHT_PATTERN, r"\1", dimensions))
-                # IN: "/h:250/w:500"                         OUT: 500
-                width = int(re.sub(WIDTH_PATTERN, r"\1", dimensions))
-
-                # Make sure image is square; if not, try next result
-                if height == width:
-                    return image_url
-            except Exception:
-                continue
-        print("INFO: No square images found.")
 
     @staticmethod
     def find_image(search_results: Dict[str, Any]) -> Optional[str]:
@@ -203,6 +168,21 @@ class Discogs:
             return None
 
     @staticmethod
+    def _get_image_url_by_item_id(item_id: str, endpoint_prefix: str) -> Optional[str]:
+        """
+        Shared by get_release_image_url/get_artist_image_url/get_label_image_url:
+        given an already-resolved Discogs item ID, fetches the item's detail
+        endpoint and returns its first square image URL, if any.
+        """
+        endpoint = f"/{endpoint_prefix}/{item_id}"
+        try:
+            res = Discogs.request(endpoint)
+            img = Discogs.find_image(res)
+            return img if img else None
+        except requests.exceptions.RequestException:
+            return None
+
+    @staticmethod
     def get_release_image_url(name: str, artist: str) -> Optional[str]:
         """
         Retrieves the URL of the image associated with the specified Discogs release.
@@ -225,17 +205,8 @@ class Discogs:
 
         release_id = Discogs.get_item_id(name=name, artist=artist, item_type="release")
         if release_id:
-            print("Got release ID. Checking for images...")
-            endpoint = f"/releases/{release_id}"
-            try:
-                res = Discogs.request(endpoint)
-                img = Discogs.find_image(res)
-                return img if img else None
-            except requests.exceptions.RequestException:
-                return None
-        else:
-            print("No search results found.")
-            return None
+            return Discogs._get_image_url_by_item_id(release_id, "releases")
+        return None
 
     @staticmethod
     def get_artist_image_url(name: str) -> Optional[str]:
@@ -251,17 +222,11 @@ class Discogs:
         """
         if not name or not isinstance(name, str):
             return None
+
         artist_id = Discogs.get_item_id(name=name, item_type="artist")
         if artist_id:
-            endpoint = f"/artists/{artist_id}"
-            try:
-                res = Discogs.request(endpoint)
-                return Discogs.find_image(res)
-            except requests.exceptions.RequestException:
-                return None
-        else:
-            print("No search results found.")
-            return None
+            return Discogs._get_image_url_by_item_id(artist_id, "artists")
+        return None
 
     @staticmethod
     def get_label_image_url(name: str) -> Optional[str]:
@@ -277,14 +242,32 @@ class Discogs:
         """
         if not name or not isinstance(name, str):
             return None
+
         label_id = Discogs.get_item_id(name=name, item_type="label")
         if label_id:
-            endpoint = f"/labels/{label_id}"
-            try:
-                res = Discogs.request(endpoint)
-                return Discogs.find_image(res)
-            except requests.exceptions.RequestException:
-                return None
-        else:
-            print("No search results found.")
-            return None
+            return Discogs._get_image_url_by_item_id(label_id, "labels")
+        return None
+
+    @staticmethod
+    def resolve_image_url(
+        entity_type: valid_entity_types,
+        release_name: Optional[str],
+        artist_name: Optional[str],
+        label_name: Optional[str],
+    ):
+        log_str = f"Resolving image URL from Discogs: {entity_type} - "
+        match entity_type:
+            case "release":
+                print(log_str, release_name)
+                img_url = Discogs.get_release_image_url(
+                    name=release_name, artist=artist_name
+                )
+            case "artist":
+                print(log_str, artist_name)
+                img_url = Discogs.get_artist_image_url(name=artist_name)
+            case "label":
+                print(log_str, label_name)
+                img_url = Discogs.get_label_image_url(name=label_name)
+            case _:
+                img_url = {}
+        return img_url

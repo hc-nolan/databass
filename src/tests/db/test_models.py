@@ -1,6 +1,15 @@
 import pytest
 from databass import create_app
-from databass.db.models import Release, Artist, Label, ArtistOrLabel, Goal, Genre
+from databass.db.models import (
+    Release,
+    Artist,
+    Label,
+    ArtistOrLabel,
+    Goal,
+    Genre,
+    mean_avg_and_count,
+    bayesian_avg,
+)
 from datetime import datetime
 
 
@@ -805,7 +814,7 @@ class TestReleaseAddedPerDayThisYear:
         mock_listens = mocker.patch("databass.db.models.Release.added_this_year")
         mock_listens.return_value = listens
 
-        mock_date = mocker.patch("databass.db.models.date")
+        mock_date = mocker.patch("databass.db.models.base.date")
         mock_date.today.return_value.timetuple.return_value.tm_yday = days
 
         result = Release.added_per_day_this_year()
@@ -814,7 +823,7 @@ class TestReleaseAddedPerDayThisYear:
     def test_added_per_day_this_year_handles_zero_days(self, mocker):
         """Test that added_per_day_this_year returns 0.0 when days_this_year is 0"""
         mock_listens = mocker.patch("databass.db.models.Release.added_this_year")
-        mock_date = mocker.patch("databass.db.models.date")
+        mock_date = mocker.patch("databass.db.models.base.date")
         mock_date.today.return_value.timetuple.return_value.tm_yday = 0
 
         result = Release.added_per_day_this_year()
@@ -827,7 +836,7 @@ class TestReleaseAddedPerDayThisYear:
         mock_listens = mocker.patch("databass.db.models.Release.added_this_year")
         mock_listens.return_value = 100
 
-        mock_date = mocker.patch("databass.db.models.date")
+        mock_date = mocker.patch("databass.db.models.base.date")
         mock_date.today.return_value.timetuple.return_value.tm_yday = 33
         # Should result in 3.0303... before rounding
 
@@ -838,7 +847,7 @@ class TestReleaseAddedPerDayThisYear:
     def test_added_per_day_this_year_uses_correct_year_day(self, mocker):
         """Test that added_per_day_this_year uses the correct day of year"""
         mock_listens = mocker.patch("databass.db.models.Release.added_this_year")
-        mock_date = mocker.patch("databass.db.models.date")
+        mock_date = mocker.patch("databass.db.models.base.date")
         mock_timetuple = mocker.Mock()
         mock_timetuple.tm_yday = 100
 
@@ -909,7 +918,7 @@ class TestReleaseDynamicSearch:
     def test_dynamic_search_comparison_filters(self, mocker):
         """Test that dynamic_search correctly handles comparison filters"""
         mocker.patch("databass.db.base.app_db.session.query")
-        mock_apply = mocker.patch("databass.db.util.apply_comparison_filter")
+        mock_apply = mocker.patch("databass.db.models.catalog.apply_comparison_filter")
 
         Release.dynamic_search(
             {
@@ -1020,15 +1029,10 @@ class TestReleaseCreateNew:
 
     def test_create_new_returns_integer(self, mocker):
         """Test that create_new returns an integer ID"""
-        mock_construct = mocker.patch("databass.db.construct_item")
-        mock_insert = mocker.patch("databass.db.operations.insert")
-        mocker.patch("databass.db.operations.update")
-        mock_get_image = mocker.patch("databass.api.Util.get_image")
+        mock_insert = mocker.patch("databass.db.models.catalog.insert")
+        mock_get_image = mocker.patch("databass.api.image.fetch_image")
 
-        mock_release = mocker.Mock()
-        mock_release.id = 42
-        mock_construct.return_value = mock_release
-        mock_insert.return_value = mock_release.id
+        mock_insert.return_value = 42
         mock_get_image.return_value = "path/to/image.jpg"
 
         test_data = {
@@ -1050,11 +1054,9 @@ class TestReleaseCreateNew:
             Release.create_new(invalid_data)
 
     def test_create_new_constructs_release_correctly(self, mocker):
-        """Test that create_new calls construct_item with correct parameters"""
-        mock_construct = mocker.patch("databass.db.operations.construct_item")
-        mock_insert = mocker.patch("databass.db.operations.insert")
-        mock_update = mocker.patch("databass.db.operations.update")
-        mock_get_image = mocker.patch("databass.api.Util.get_image")
+        """Test that create_new constructs a Release with the given data before inserting"""
+        mock_insert = mocker.patch("databass.db.models.catalog.insert")
+        mocker.patch("databass.api.image.fetch_image", return_value=None)
 
         test_data = {
             "name": "Test Release",
@@ -1065,20 +1067,23 @@ class TestReleaseCreateNew:
         }
 
         Release.create_new(test_data)
-        mock_construct.assert_called_once_with("release", test_data)
 
-    def test_create_new_missing_required_fields(self, mocker):
-        """Test that create_new handles missing required fields appropriately"""
-        mock_construct = mocker.patch("databass.db.operations.construct_item")
-        mock_construct.side_effect = KeyError("Missing required field")
+        inserted_release = mock_insert.call_args[0][0]
+        assert isinstance(inserted_release, Release)
+        for key, value in test_data.items():
+            assert getattr(inserted_release, key) == value
 
-        test_data = {
-            "name": "Test Release"
-            # Missing other required fields
-        }
+    def test_create_new_missing_optional_fields(self, mocker):
+        """Test that create_new doesn't raise when optional fields are absent"""
+        mock_insert = mocker.patch("databass.db.models.catalog.insert")
+        mock_get_image = mocker.patch("databass.api.image.fetch_image")
+        mock_insert.return_value = 1
 
-        with pytest.raises(KeyError, match="Missing required field"):
-            Release.create_new(test_data)
+        test_data = {"name": "Test Release"}
+
+        result = Release.create_new(test_data)
+        assert result == 1
+        mock_get_image.assert_not_called()
 
 
 class TestArtistOrLabelFrequencyHighest:
@@ -1551,7 +1556,7 @@ class TestGoalCheckGoals:
         untouched_goal = Goal(type="release", amount=10)
 
         mocker.patch.object(Goal, "get_incomplete", return_value=[completed_goal, untouched_goal])
-        mocker.patch("databass.db.operations.update")
+        mocker.patch("databass.db.models.goal.update")
 
         result = Goal.check_goals()
 
@@ -1567,100 +1572,9 @@ class TestGoalCheckGoals:
         )
 
         mocker.patch.object(Goal, "get_incomplete", return_value=[untouched_goal])
-        mocker.patch("databass.db.operations.update")
+        mocker.patch("databass.db.models.goal.update")
 
         assert Goal.check_goals() == []
-
-
-class TestGenreCreateGenres:
-    """Test suite for Genre.create_genres static method"""
-
-    def test_create_genres_creates_correct_number_of_genres(self, mocker, app):
-        """Test that create_genres creates the correct number of Genre objects from comma-separated string"""
-        with app.app_context():
-            # Mock the exists_by_name method to always return False
-            mocker.patch.object(Genre, "exists_by_name", return_value=False)
-
-            # Mock construct_item to return a predictable Genre object
-            mock_construct = mocker.patch("databass.db.operations.construct_item")
-            mock_construct.side_effect = lambda type, data: Genre(name=data["name"])
-
-            # Mock insert to return a predictable ID
-            mock_insert = mocker.patch(
-                "databass.db.operations.insert", side_effect=[1, 2, 3]
-            )
-
-            test_genres = "rock,jazz,electronic"
-            result = Genre.create_genres(test_genres)
-
-            # Verify the mocks were called correctly
-            assert mock_construct.call_count == 3
-            assert mock_insert.call_count == 3
-
-            # Verify the correct genre names were used
-            assert [genre.name for genre in result] == ["rock", "jazz", "electronic"]
-
-    @pytest.mark.parametrize(
-        "genres_string,expected_genres",
-        [
-            ("rock,jazz", ["rock", "jazz"]),
-            ("electronic", ["electronic"]),
-            ("metal,punk,indie,folk", ["metal", "punk", "indie", "folk"]),
-            ("", [""]),
-        ],
-    )
-    def test_create_genres_splits_string_correctly(
-        self, mocker, genres_string, expected_genres, app
-    ):
-        """Test that create_genres correctly splits the input string into individual genres"""
-        with app.app_context():
-            mock_construct = mocker.patch("databass.db.operations.construct_item")
-            mock_insert = mocker.patch("databass.db.operations.insert")
-
-            Genre.create_genres(genres_string)
-
-            for genre in expected_genres:
-                mock_construct.assert_any_call("genre", {"name": genre})
-
-    def test_create_genress_constructs_genre_objects_correctly(self, mocker, app):
-        """Test that create_genres constructs Genre objects with correct parameters"""
-        with app.app_context():
-            mock_construct = mocker.patch("databass.db.operations.construct_item")
-            mock_insert = mocker.patch("databass.db.operations.insert")
-
-            test_release_id = 42
-            test_genre = "rock"
-            Genre.create_genres(test_genre)
-
-            mock_construct.assert_called_once_with("genre", {"name": test_genre})
-
-    def test_create_genres_inserts_constructed_objects(self, mocker, app):
-        """Test that create_genres inserts the constructed Genre objects into the database"""
-        with app.app_context():
-            mock_genre = mocker.Mock()
-            mock_construct = mocker.patch("databass.db.operations.construct_item")
-            mock_insert = mocker.patch("databass.db.operations.insert")
-            mock_construct.return_value = mock_genre
-
-            Genre.create_genres("rock")
-
-            mock_insert.assert_called_once_with(mock_genre)
-
-    def test_create_genres_handles_whitespace(self, mocker, app):
-        """Test that create_genres handles genres with whitespace correctly"""
-        with app.app_context():
-            mock_construct = mocker.patch("databass.db.operations.construct_item")
-            mock_insert = mocker.patch("databass.db.operations.insert")
-
-            test_genres = "rock , jazz , electronic"
-            Genre.create_genres(test_genres)
-
-            expected_calls = [
-                mocker.call("genre", {"name": "rock "}),
-                mocker.call("genre", {"name": " jazz "}),
-                mocker.call("genre", {"name": " electronic"}),
-            ]
-            mock_construct.assert_has_calls(expected_calls)
 
 
 class TestArtistAllReleases:
@@ -1703,3 +1617,75 @@ class TestArtistAllReleases:
         artist.collab_releases = []
 
         assert artist.all_releases == [newer, older]
+
+
+class TestMeanAvgAndCount:
+    # Tests for mean_avg_and_count()
+    @pytest.mark.parametrize(
+        "input_list,expected_avg,expected_count",
+        [
+            ([{"avg": 98, "count": 5}, {"avg": 80, "count": 10}], 89.0, 7.5),
+            (
+                [
+                    {"avg": 47, "count": 1},
+                    {"avg": 53, "count": 4},
+                    {"avg": 62, "count": 2},
+                ],
+                54.0,
+                2.3333333333333335,
+            ),
+        ],
+    )
+    def test_mean_avg_and_count_success(
+        self, input_list, expected_avg, expected_count, mocker
+    ):
+        """
+        Test for proper handling of successful calculation of average and total count
+        """
+        mock_list = []
+        for item in input_list:
+            mock_item = mocker.MagicMock()
+            mock_item.average_rating = item["avg"]
+            mock_item.release_count = item["count"]
+            mock_list.append(mock_item)
+
+        result_avg, result_count = mean_avg_and_count(mock_list)
+        assert result_avg == expected_avg
+        assert result_count == expected_count
+
+    def test_mean_avg_and_count_fail(self, mocker):
+        """
+        Test for proper handling of invalid input data; invalid element should be discounted from the end calculation
+        """
+        mock_row = mocker.MagicMock()
+        mock_row.average_rating = 60
+        mock_row.release_count = 2
+        entity_list = [{"test": 1}, mock_row]
+        result_avg, result_count = mean_avg_and_count(entity_list)
+        assert result_avg == 60
+        assert result_count == 2
+
+
+class TestBayesianAvg:
+    # Tests for bayesian_avg()
+    @pytest.mark.parametrize(
+        "weight,item_avg,mean_avg",
+        [(2.0, 1.0, None), (2.0, None, 3.0), (None, 1.0, 3.0)],
+    )
+    def test_bayesian_avg_missing_value(self, weight, item_avg, mean_avg):
+        """
+        Test for correct handling of input with missing values
+        """
+        with pytest.raises(ValueError, match="Input missing one of the required values"):
+            bayesian_avg(item_weight=weight, item_avg=item_avg, mean_avg=mean_avg)
+
+    @pytest.mark.parametrize(
+        "weight,item_avg,mean_avg,expected",
+        [(1.0, 2.0, 3.0, 2.0), (2.0, 3.0, 1.0, 5.0), (3.0, 1.0, 2.0, -1.0)],
+    )
+    def test_bayesian_avg_correct_return(self, weight, item_avg, mean_avg, expected):
+        """
+        Test for correct handling of valid input
+        """
+        result = bayesian_avg(item_weight=weight, item_avg=item_avg, mean_avg=mean_avg)
+        assert result == expected
