@@ -22,6 +22,25 @@ services:
       - DOCKER=True
     volumes:
       - ./images:/databass/databass/static/img
+  backfill-images:
+    profiles: ["tools"]
+    build: .
+    depends_on:
+      - postgres
+    environment:
+      - DISCOGS_KEY=${DISCOGS_KEY}
+      - DISCOGS_SECRET=${DISCOGS_SECRET}
+      - PG_USER=${PG_USER}
+      - PG_PASSWORD=${PG_PASSWORD}
+      - PG_HOSTNAME=postgres
+      - DB_NAME=${DB_NAME}
+      - PG_PORT=${PG_PORT}
+      - DB_FILENAME=${SQLITE_DB}
+      - VERSION=${VERSION}
+      - DOCKER=True
+    volumes:
+      - ./images:/databass/databass/static/img
+    entrypoint: ["uv", "run", "python", "backfill_images.py"]
   postgres:
     image: postgres:16.5
     restart: always
