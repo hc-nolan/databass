@@ -20,6 +20,7 @@ DIMENSIONS_PATTERN = r"/h:\d+/w:\d+/"
 HEIGHT_PATTERN = r"/h:(\d+)/.*"
 WIDTH_PATTERN = r".*/w:(\d+)/.*"
 DISAMBIG_PATTERN = r"\s*\(\d+\)\s*$"
+FORBIDDEN_FORMATS = ["Blu-ray"]
 
 valid_entity_types = Literal["release", "artist", "label"]
 
@@ -78,7 +79,9 @@ class Discogs:
         raise requests.exceptions.RequestException(f"Status code != 200: {resp}")
 
     @staticmethod
-    def get_item_id(name: str, item_type: str, artist: str = None) -> Optional[str]:
+    def get_item_id(
+        name: str, item_type: str, artist: Optional[str] = None
+    ) -> Optional[str]:
         """
         Gets the ID for the specified item type and name.
 
@@ -93,10 +96,11 @@ class Discogs:
         if not name or not item_type:
             return None
         print(f"Getting ID for {item_type}: {name}")
-        if item_type == "release":
-            query_params = {"q": artist, "type": "release", "release_title": name}
-        else:
-            query_params = {"q": name, "type": item_type}
+        query_params = (
+            {"q": artist, "type": "release", "release_title": name}
+            if item_type == "release"
+            else {"q": name, "type": item_type}
+        )
         encoded_params = urlencode(query_params)
         endpoint = f"/database/search?{encoded_params}"
         print(f"Search endpoint: {endpoint}")
@@ -108,17 +112,17 @@ class Discogs:
 
         item_id = None
         results = res.get("results", [])
-        for result in results:
-            result_title = result.get("title")
-            if result_title is None:
-                continue
+        results_filtered = [r for r in results if r.get("title")]
+        results_filtered = [
+            r
+            for r in results_filtered
+            if not any(fmt in FORBIDDEN_FORMATS for fmt in (r.get("format") or []))
+        ]
+        for result in results_filtered:
             # remove disambiguation chars
             # e.g. "Future (4)" -> "Future"
-            result_title = re.sub(DISAMBIG_PATTERN, "", result_title)
+            result_title = re.sub(DISAMBIG_PATTERN, "", result.get("title"))
             if result_title == name:
-                result_format = result.get("format", [])
-                if "Blu-ray" in result_format:
-                    continue
                 item_id = result.get("id")
                 break
 
@@ -164,17 +168,12 @@ class Discogs:
             return None
 
     @staticmethod
-    def _get_image_url_by_item_id(
-        item_id: Optional[str], endpoint_prefix: str
-    ) -> Optional[str]:
+    def _get_image_url_by_item_id(item_id: str, endpoint_prefix: str) -> Optional[str]:
         """
         Shared by get_release_image_url/get_artist_image_url/get_label_image_url:
         given an already-resolved Discogs item ID, fetches the item's detail
         endpoint and returns its first square image URL, if any.
         """
-        if not item_id:
-            print("No search results found.")
-            return None
         endpoint = f"/{endpoint_prefix}/{item_id}"
         try:
             res = Discogs.request(endpoint)
@@ -205,7 +204,9 @@ class Discogs:
             return None
 
         release_id = Discogs.get_item_id(name=name, artist=artist, item_type="release")
-        return Discogs._get_image_url_by_item_id(release_id, "releases")
+        if release_id:
+            return Discogs._get_image_url_by_item_id(release_id, "releases")
+        return None
 
     @staticmethod
     def get_artist_image_url(name: str) -> Optional[str]:
@@ -221,8 +222,11 @@ class Discogs:
         """
         if not name or not isinstance(name, str):
             return None
+
         artist_id = Discogs.get_item_id(name=name, item_type="artist")
-        return Discogs._get_image_url_by_item_id(artist_id, "artists")
+        if artist_id:
+            return Discogs._get_image_url_by_item_id(artist_id, "artists")
+        return None
 
     @staticmethod
     def get_label_image_url(name: str) -> Optional[str]:
@@ -238,8 +242,11 @@ class Discogs:
         """
         if not name or not isinstance(name, str):
             return None
+
         label_id = Discogs.get_item_id(name=name, item_type="label")
-        return Discogs._get_image_url_by_item_id(label_id, "labels")
+        if label_id:
+            return Discogs._get_image_url_by_item_id(label_id, "labels")
+        return None
 
     @staticmethod
     def resolve_image_url(
