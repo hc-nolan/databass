@@ -4,7 +4,7 @@ from ..db.models import Artist
 from ..api import Util
 from ..db import update
 from ..decorators import load_or_404
-from ..detail import build_artist_detail
+from ..detail import build_artist_detail, build_missing_releases
 from ..errors.util import friendly_message, integrity_error_message
 
 artist_bp = Blueprint("artist_bp", __name__, template_folder="templates")
@@ -84,6 +84,12 @@ def edit_artist(artist_data):
 @load_or_404(Artist, "artist_id", inject_as="artist_data")
 def api_artist(artist_data):
     return jsonify(build_artist_detail(artist_data))
+
+
+@artist_bp.route("/api/artist/<int:artist_id>/missing", methods=["GET"])
+@load_or_404(Artist, "artist_id", inject_as="artist_data")
+def api_artist_missing(artist_data):
+    return jsonify({"missing": build_missing_releases(artist_data)})
 
 
 @artist_bp.route("/api/artist/<int:artist_id>/edit", methods=["GET"])

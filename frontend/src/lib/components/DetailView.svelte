@@ -1,7 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { apiGet, apiPut, apiPost, apiDelete } from '$lib/api';
-	import type { DetailView, ReleaseEditData, EntityEditData } from '$lib/types';
+	import type { DetailView, ReleaseEditData, EntityEditData, MissingRelease } from '$lib/types';
 	import { headerState } from '$lib/chrome.svelte';
 	import { imageSrc, ratingHint, toDateInputValue } from '$lib/format';
 	import ArtPlaceholder from './ArtPlaceholder.svelte';
@@ -13,6 +13,8 @@
 	let { kind, id }: { kind: 'release' | 'artist' | 'label'; id: number } = $props();
 
 	let detail = $state<DetailView | null>(null);
+	let missing = $state<MissingRelease[]>([]);
+	let missingLoading = $state(false);
 	let editOpen = $state(false);
 	let deleteOpen = $state(false);
 	let relistening = $state(false);
@@ -35,10 +37,23 @@
 		relistened = false;
 	}
 
+	async function loadMissing() {
+		missing = [];
+		if (kind !== 'artist') return;
+		missingLoading = true;
+		try {
+			const res = await apiGet<{ missing: MissingRelease[] }>(`/artist/${id}/missing`);
+			missing = res.missing;
+		} finally {
+			missingLoading = false;
+		}
+	}
+
 	$effect(() => {
 		id;
 		kind;
 		load();
+		loadMissing();
 	});
 
 	$effect(() => {
@@ -281,6 +296,30 @@
 						{/each}
 					</div>
 				</div>
+			</section>
+		{/if}
+
+		{#if kind === 'artist' && (missingLoading || missing.length > 0)}
+			<section class="flex flex-col gap-3.5">
+				<div class="flex flex-wrap items-baseline gap-3">
+					<span class="text-amber text-sm font-bold tracking-widest">MISSING</span>
+					<span class="text-sm text-muted">
+						{missingLoading ? 'checking MusicBrainz…' : `${missing.length} not logged yet`}
+					</span>
+				</div>
+				{#if !missingLoading}
+					<div class="grid grid-cols-[repeat(auto-fill,minmax(146px,1fr))] gap-4">
+						{#each missing as m (m.href)}
+							<a
+								href={m.href}
+								class="border-border-strong hover:border-border-hover flex min-w-0 flex-col gap-0.5 rounded-lg border border-dashed p-3"
+							>
+								<span class="text-md leading-tight text-pretty">{m.name}</span>
+								<span class="text-sm text-muted">{m.year ?? '—'}</span>
+							</a>
+						{/each}
+					</div>
+				{/if}
 			</section>
 		{/if}
 

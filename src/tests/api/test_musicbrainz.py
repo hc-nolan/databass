@@ -517,6 +517,50 @@ class TestGetReleaseLength:
         assert result == 180000
 
 
+class TestArtistReleaseGroups:
+    def test_returns_parsed_groups(self, mocker):
+        mock_response = {
+            "release-group-list": [
+                {"id": "aaa", "title": "First Album", "first-release-date": "2011-01-11"},
+                {"id": "bbb", "title": "Second Album", "first-release-date": "2014"},
+            ]
+        }
+        mocker.patch("musicbrainzngs.browse_release_groups", return_value=mock_response)
+        MusicBrainz.init = True
+
+        result = MusicBrainz.artist_release_groups("valid-mbid")
+
+        assert result == [
+            {"mbid": "aaa", "name": "First Album", "year": "2011"},
+            {"mbid": "bbb", "name": "Second Album", "year": "2014"},
+        ]
+
+    def test_missing_first_release_date(self, mocker):
+        mock_response = {
+            "release-group-list": [{"id": "aaa", "title": "First Album"}]
+        }
+        mocker.patch("musicbrainzngs.browse_release_groups", return_value=mock_response)
+        MusicBrainz.init = True
+
+        result = MusicBrainz.artist_release_groups("valid-mbid")
+
+        assert result == [{"mbid": "aaa", "name": "First Album", "year": None}]
+
+    @pytest.mark.parametrize("invalid_mbid", [None, "", 123, [], {}])
+    def test_invalid_mbid(self, invalid_mbid):
+        result = MusicBrainz.artist_release_groups(invalid_mbid)
+        assert result == []
+
+    def test_api_error(self, mocker):
+        mocker.patch(
+            "musicbrainzngs.browse_release_groups", side_effect=Exception("API Error")
+        )
+        MusicBrainz.init = True
+
+        result = MusicBrainz.artist_release_groups("valid-mbid")
+        assert result == []
+
+
 class TestGetImage:
     @pytest.mark.parametrize(
         "mbid,size",

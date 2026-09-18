@@ -249,6 +249,42 @@ class MusicBrainz:
             return None
 
     @staticmethod
+    def artist_release_groups(mbid: str) -> list[dict]:
+        """
+        Fetch an artist's full album discography from MusicBrainz.
+
+        Args:
+            mbid (str): The MBID (MusicBrainz ID) of the artist.
+
+        Returns:
+            list[dict]: A list of dicts with keys `mbid`, `name`, `year`, one per
+            release group (album), or an empty list if the lookup fails.
+        """
+        if not mbid or not isinstance(mbid, str):
+            return []
+        if not MusicBrainz.init:
+            MusicBrainz.initialize()
+
+        try:
+            result = mbz.browse_release_groups(
+                artist=mbid, release_type=["album"], limit=100
+            )
+        except Exception:
+            return []
+
+        groups = []
+        for rg in result.get("release-group-list", []):
+            date = rg.get("first-release-date", "")
+            groups.append(
+                {
+                    "mbid": rg.get("id"),
+                    "name": rg.get("title"),
+                    "year": date[:4] if date else None,
+                }
+            )
+        return groups
+
+    @staticmethod
     def get_release_length(mbid: str) -> int:
         """
         Get the total length of a release on MusicBrainz in milliseconds.

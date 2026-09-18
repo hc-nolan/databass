@@ -63,6 +63,41 @@ def existing_artist(app):
         return artist.id
 
 
+class TestArtistMissing:
+    # Tests for /api/artist/<id>/missing
+    def test_no_mbid_returns_empty(self, client, existing_artist):
+        response = client.get(f"/api/artist/{existing_artist}/missing")
+        assert response.status_code == 200
+        assert response.get_json() == {"missing": []}
+
+    def test_returns_unlogged_albums(self, app, client, mocker):
+        with app.app_context():
+            artist = Artist(
+                mbid="bce6d667-cde8-485e-b078-c0a05adea36d",
+                name="ScHoolboy Q",
+            )
+            app_db.session.add(artist)
+            app_db.session.commit()
+            artist_id = artist.id
+
+        mocker.patch(
+            "databass.detail.MusicBrainz.artist_release_groups",
+            return_value=[
+                {"mbid": "a", "name": "Setbacks", "year": "2011"},
+                {"mbid": "b", "name": "Oxymoron", "year": "2014"},
+            ],
+        )
+
+        response = client.get(f"/api/artist/{artist_id}/missing")
+        assert response.status_code == 200
+        names = [m["name"] for m in response.get_json()["missing"]]
+        assert names == ["Setbacks", "Oxymoron"]
+
+    def test_artist_not_found(self, client):
+        response = client.get("/api/artist/999999/missing")
+        assert response.status_code == 404
+
+
 class TestEditArtist:
     # Tests for /artist/<id>/edit
     def test_edit_unsupported_image_url_flashes_error(self, client, mocker, existing_artist):

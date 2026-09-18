@@ -10,7 +10,7 @@
 
 	let data = $state<NewListenData | null>(null);
 	let qRelease = $state(pageState.url.searchParams.get('q') ?? '');
-	let qArtist = $state('');
+	let qArtist = $state(pageState.url.searchParams.get('artist') ?? '');
 	let qLabel = $state('');
 	let results = $state<SearchResultItem[]>([]);
 	let searched = $state(false);
@@ -42,7 +42,7 @@
 	onMount(async () => {
 		data = await apiGet<NewListenData>('/new');
 		listenDate = data.today;
-		if (qRelease) doSearch();
+		if (qRelease || qArtist) doSearch();
 	});
 
 	$effect(() => {
