@@ -7,8 +7,10 @@ and `labels/routes.py`.
 """
 
 from datetime import date
+from urllib.parse import urlencode
 from sqlalchemy import func, extract
 
+from .api.musicbrainz import MusicBrainz
 from .db import models
 from .db.base import app_db
 from .routes import initials, image_exists, country_name, format_runtime
@@ -219,6 +221,33 @@ def build_release_detail(release: models.Release) -> dict:
         "context": context,
         "rails": rails,
     }
+
+
+def build_missing_releases(artist: models.Artist) -> list[dict]:
+    """
+    Albums by this artist on MusicBrainz that haven't been logged yet.
+
+    Matches on lowercased release name against the artist's own (non-collab)
+    logged releases, since we don't persist a release-group MBID to match on.
+    """
+    if not artist.mbid:
+        return []
+
+    discography = MusicBrainz.artist_release_groups(artist.mbid)
+    if not discography:
+        return []
+
+    logged_names = {r.name.strip().lower() for r in artist.releases if r.name}
+    missing = [rg for rg in discography if (rg["name"] or "").strip().lower() not in logged_names]
+    missing.sort(key=lambda rg: rg["year"] or "")
+    return [
+        {
+            "name": rg["name"],
+            "year": rg["year"],
+            "href": f"/new?{urlencode({'q': rg['name'], 'artist': artist.name})}",
+        }
+        for rg in missing
+    ]
 
 
 def build_artist_detail(artist: models.Artist) -> dict:

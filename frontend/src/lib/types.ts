@@ -23,6 +23,12 @@ export interface Rail {
 	items: RailItem[];
 }
 
+export interface MissingRelease {
+	name: string;
+	year: string | null;
+	href: string;
+}
+
 export interface Link {
 	name: string;
 	href?: string;
