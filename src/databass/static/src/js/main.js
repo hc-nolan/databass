@@ -521,6 +521,10 @@ document.addEventListener('DOMContentLoaded', () => {
         initGoalsPage();
     }
 
+    if (window.location.pathname.startsWith("/artist/")) {
+        initArtistMissingSection();
+    }
+
     document.addEventListener('click', function(event) {
         if (event.target && event.target.classList.contains('delete-btn')) {
             handleDeleteButton(event.target);
@@ -555,6 +559,50 @@ document.addEventListener('DOMContentLoaded', () => {
 
     });
 });
+
+function initArtistMissingSection() {
+    const section = document.getElementById('missing-section');
+    const grid = document.getElementById('missing-grid');
+    const note = document.getElementById('missing-note');
+    if (!section || !grid || !note) return;
+
+    const artistId = window.location.pathname.split('/').filter(Boolean)[1];
+    if (!artistId) return;
+
+    section.hidden = false;
+    note.textContent = 'checking MusicBrainz…';
+
+    fetch('/api/artist/' + artistId + '/missing')
+        .then(response => response.json())
+        .then(data => {
+            const missing = data.missing || [];
+            if (missing.length === 0) {
+                section.hidden = true;
+                return;
+            }
+            note.textContent = missing.length + ' not logged yet';
+            missing.forEach(m => {
+                const item = document.createElement('a');
+                item.className = 'missing-item';
+                item.href = m.href;
+
+                const name = document.createElement('span');
+                name.className = 'missing-item__name';
+                name.textContent = m.name;
+
+                const year = document.createElement('span');
+                year.className = 'missing-item__year';
+                year.textContent = m.year || '—';
+
+                item.appendChild(name);
+                item.appendChild(year);
+                grid.appendChild(item);
+            });
+        })
+        .catch(() => {
+            section.hidden = true;
+        });
+}
 
 function editEntity(editButton, entityType) {
     let entityId = editButton.getAttribute('data-id');
