@@ -111,6 +111,16 @@
         </section>
         {% endif %}
 
+        {% if data.kind == 'artist' %}
+        <section id="missing-section" style="display:flex;flex-direction:column;gap:14px" hidden>
+            <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px">
+                <span class="eyebrow--amber">MISSING</span>
+                <span id="missing-note" style="font-size:11.5px;color:var(--muted)"></span>
+            </div>
+            <div class="rail-grid" id="missing-grid"></div>
+        </section>
+        {% endif %}
+
         {% for rail in data.rails %}
         <section style="display:flex;flex-direction:column;gap:14px">
             <div style="display:flex;flex-wrap:wrap;align-items:baseline;gap:12px">
