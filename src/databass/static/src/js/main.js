@@ -584,7 +584,13 @@ function initArtistMissingSection() {
             missing.forEach(m => {
                 const item = document.createElement('a');
                 item.className = 'missing-item';
-                item.href = m.href;
+                try {
+                    const url = new URL(m.href, window.location.origin);
+                    if (url.origin !== window.location.origin) return;
+                    item.href = url.href;
+                } catch (e) {
+                    return;
+                }
 
                 const name = document.createElement('span');
                 name.className = 'missing-item__name';
