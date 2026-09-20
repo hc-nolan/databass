@@ -1,8 +1,5 @@
 import pytest
 from databass import create_app
-from databass.db.base import app_db
-from databass.db.models import Artist, Label, Genre, Release
-from werkzeug.datastructures import MultiDict
 import datetime
 
 
@@ -77,52 +74,17 @@ class TestReleases:
         assert response.headers["Location"] == "/browse/releases"
 
 
-class TestRelease:
-    # Tests for /release
-    def test_release_successful_page_load(self, app, client):
-        with app.app_context():
-            artist = Artist(mbid=None, name="ScHoolboy Q")
-            label = Label(mbid=None, name="Top Dawg Entertainment")
-            genre = Genre(name="hiphop")
-            app_db.session.add_all([artist, label, genre])
-            app_db.session.commit()
-
-            release = Release(
-                mbid=None,
-                artist_id=artist.id,
-                label_id=label.id,
-                name="BLUE LIPS",
-                country="[Worldwide]",
-                year=2024,
-                runtime=3361000,
-                rating=70,
-                listen_date=datetime.datetime(2024, 3, 3, 0, 0),
-                track_count=18,
-                main_genre_id=genre.id,
-            )
-            app_db.session.add(release)
-            app_db.session.commit()
-            release_id = release.id
-
-        response = client.get(f"/release/{release_id}")
-        assert response.status_code == 200
-        assert b"BLUE LIPS" in response.data
-
-    def test_release_not_found(self, client, mocker):
-        mocker.patch("databass.db.models.Release.exists_by_id", return_value=False)
-        response = client.get("/release/99999999999999999999")
-        assert response.status_code == 302
-        assert b"You should be redirected automatically" in response.data
-
-
-class TestEdit:
-    # Tests for /release/<id>/edit
+class TestApiEditRelease:
+    # Tests for GET /api/release/<id>/edit, PUT /api/release/<id>
     def test_edit_get_success(
         self, mocker, client, mock_release_data, mock_artist_data, mock_label_data
     ):
         """
-        Test for successful handling of a GET request, which displays the editable fields
+        Test for successful handling of a GET request, which returns the editable fields
         """
+        mock_release_data.main_genre = None
+        mock_release_data.genres = []
+        mock_release_data.collab_artists = []
         mocker.patch(
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
@@ -130,34 +92,39 @@ class TestEdit:
             "databass.db.models.Release.get_distinct_column_values",
             return_value=["a", "b"],
         )
-        mocker.patch("databass.db.models.Label.exists_by_id", return_value=True)
-        mocker.patch("databass.db.models.Artist.exists_by_id", return_value=True)
-        response = client.get("/release/1/edit")
+        mocker.patch(
+            "databass.db.models.Label.exists_by_id", return_value=mock_label_data
+        )
+        mocker.patch(
+            "databass.db.models.Artist.exists_by_id", return_value=mock_artist_data
+        )
+        response = client.get("/api/release/1/edit")
         assert response.status_code == 200
-        assert b"edit_form" in response.data
+        assert response.get_json()["name"] == "BLUE LIPS"
 
     def test_edit_get_non_existing_release(self, client, mocker):
         """
         Test for successful handling of a GET request for a release that does not exist
         """
         mocker.patch("databass.db.models.Release.exists_by_id", return_value=False)
-        response = client.get("/release/9999999999/edit")
-        assert response.status_code == 302
-        assert response.location == "/error"
-        assert b"You should be redirected automatically" in response.data
+        response = client.get("/api/release/9999999999/edit")
+        assert response.status_code == 404
 
     def test_edit_post_success(self, client, mock_release_data, mocker):
         """
-        Test for successful handling of a POST request, which submits edited data
+        Test for successful handling of a PUT request, which submits edited data
         """
         mocker.patch("databass.db.construct_item", return_value=mock_release_data)
         mocker.patch(
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
         mocker.patch("databass.db.update")
-        response = client.post(
-            "/release/1/edit",
-            data={
+        mocker.patch(
+            "databass.releases.routes.build_release_detail", return_value={"id": 1}
+        )
+        response = client.put(
+            "/api/release/1",
+            json={
                 "artist_id": "1",
                 "country": "[Worldwide]",
                 "genre": "hiphop",
@@ -171,9 +138,7 @@ class TestEdit:
                 "tags": "None",
             },
         )
-        assert response.status_code == 302
-        assert response.location == "/"
-        assert b"You should be redirected automatically" in response.data
+        assert response.status_code == 200
 
     def test_edit_post_sets_collab_artists(self, client, mock_release_data, mocker):
         """
@@ -187,17 +152,20 @@ class TestEdit:
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
         mocker.patch("databass.db.update")
+        mocker.patch(
+            "databass.releases.routes.build_release_detail", return_value={"id": 1}
+        )
         mock_create = mocker.patch(
             "databass.db.models.Artist.create_if_not_exist", return_value=2
         )
         mock_artist = mocker.MagicMock()
         mocker.patch("databass.db.models.Artist.exists_by_id", return_value=mock_artist)
 
-        response = client.post(
-            "/release/1/edit", data={"collab_artists": "Ghostface Killah"}
+        response = client.put(
+            "/api/release/1", json={"collab_artists": "Ghostface Killah"}
         )
 
-        assert response.status_code == 302
+        assert response.status_code == 200
         mock_create.assert_called_once_with("Ghostface Killah")
         submit_data = mock_construct.call_args[0][1]
         assert submit_data["collab_artists"] == [mock_artist]
@@ -216,10 +184,13 @@ class TestEdit:
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
         mocker.patch("databass.db.update")
+        mocker.patch(
+            "databass.releases.routes.build_release_detail", return_value={"id": 1}
+        )
 
-        response = client.post("/release/1/edit", data={"collab_artists": ""})
+        response = client.put("/api/release/1", json={"collab_artists": ""})
 
-        assert response.status_code == 302
+        assert response.status_code == 200
         submit_data = mock_construct.call_args[0][1]
         assert submit_data["collab_artists"] == []
 
@@ -227,9 +198,9 @@ class TestEdit:
         self, client, mock_release_data, mocker
     ):
         """
-        Test that submitting multiple collab artists as repeated form fields
-        resolves each full name, even when a name itself contains a comma
-        (e.g. "Earth, Wind & Fire"), rather than splitting it into fragments
+        Test that submitting multiple collab artists as a list resolves each
+        full name, even when a name itself contains a comma (e.g. "Earth,
+        Wind & Fire"), rather than splitting it into fragments
         """
         mock_construct = mocker.patch(
             "databass.db.construct_item", return_value=mock_release_data
@@ -238,6 +209,9 @@ class TestEdit:
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
         mocker.patch("databass.db.update")
+        mocker.patch(
+            "databass.releases.routes.build_release_detail", return_value={"id": 1}
+        )
         mock_create = mocker.patch(
             "databass.db.models.Artist.create_if_not_exist", return_value=2
         )
@@ -246,17 +220,12 @@ class TestEdit:
             "databass.db.models.Artist.exists_by_id", return_value=mock_artist
         )
 
-        response = client.post(
-            "/release/1/edit",
-            data=MultiDict(
-                [
-                    ("collab_artists", "Earth, Wind & Fire"),
-                    ("collab_artists", "Nile Rodgers"),
-                ]
-            ),
+        response = client.put(
+            "/api/release/1",
+            json={"collab_artists": ["Earth, Wind & Fire", "Nile Rodgers"]},
         )
 
-        assert response.status_code == 302
+        assert response.status_code == 200
         mock_create.assert_any_call("Earth, Wind & Fire")
         mock_create.assert_any_call("Nile Rodgers")
         assert mock_create.call_count == 2
@@ -267,8 +236,8 @@ class TestEdit:
         self, client, mock_release_data, mocker
     ):
         """
-        Test that submitting multiple genres as repeated form fields resolves
-        each full name, even when a name itself contains a comma, rather than
+        Test that submitting multiple genres as a list resolves each full
+        name, even when a name itself contains a comma, rather than
         splitting it into fragments
         """
         mock_construct = mocker.patch(
@@ -278,22 +247,20 @@ class TestEdit:
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
         mocker.patch("databass.db.update")
+        mocker.patch(
+            "databass.releases.routes.build_release_detail", return_value={"id": 1}
+        )
         mock_genre = mocker.MagicMock()
         mock_create_genre = mocker.patch(
             "databass.db.models.Genre.create_if_not_exists", return_value=mock_genre
         )
 
-        response = client.post(
-            "/release/1/edit",
-            data=MultiDict(
-                [
-                    ("genres", "Chill, Wave"),
-                    ("genres", "synthpop"),
-                ]
-            ),
+        response = client.put(
+            "/api/release/1",
+            json={"genres": ["Chill, Wave", "synthpop"]},
         )
 
-        assert response.status_code == 302
+        assert response.status_code == 200
         mock_create_genre.assert_any_call("Chill, Wave")
         mock_create_genre.assert_any_call("synthpop")
         assert mock_create_genre.call_count == 2
@@ -302,71 +269,15 @@ class TestEdit:
 
     def test_edit_post_failure_non_existing_release(self, client, mocker):
         """
-        Test for successful handling of a POST request to a release that does not exist
+        Test for successful handling of a PUT request to a release that does not exist
         """
         mock_release = mocker.patch(
             "databass.db.models.Release.exists_by_id", return_value=False
         )
-        response = client.post("/release/9999999999/edit")
+        response = client.put("/api/release/9999999999", json={})
         mock_release.assert_called_once()
-        assert response.status_code == 302
-        assert response.location == "/error"
-        assert b"You should be redirected automatically" in response.data
+        assert response.status_code == 404
 
-    def test_edit_post_unsupported_image_url_flashes_error(
-        self, client, mock_release_data, mocker
-    ):
-        """
-        An unsupported image URL should redirect to the error page with a
-        specific message instead of crashing the whole edit.
-        """
-        mocker.patch(
-            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
-        )
-        mocker.patch(
-            "databass.releases.routes.Util.get_image_from_url",
-            side_effect=ValueError(
-                "ERROR: No supported image type found in URL: https://example.com/page"
-            ),
-        )
-        response = client.post(
-            "/release/1/edit",
-            data={"image": "https://example.com/page"},
-        )
-        assert response.status_code == 302
-        assert response.location == "/error"
-
-        error_response = client.get("/error")
-        assert b"No supported image type found" in error_response.data
-
-    def test_edit_post_integrity_error_names_field(self, client, mock_release_data, mocker):
-        """A unique-constraint violation on save should name the offending field."""
-        from sqlalchemy.exc import IntegrityError
-
-        mocker.patch("databass.db.construct_item", return_value=mock_release_data)
-        mocker.patch(
-            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
-        )
-        mocker.patch(
-            "databass.releases.routes.db.update",
-            side_effect=IntegrityError(
-                "statement", {}, Exception("UNIQUE constraint failed: release.mbid")
-            ),
-        )
-        response = client.post(
-            "/release/1/edit",
-            data={"name": "BLUE LIPS", "id": "1"},
-        )
-        assert response.status_code == 302
-        assert response.location == "/error"
-
-        error_response = client.get("/error")
-        assert b"mbid" in error_response.data
-        assert b"already exists" in error_response.data
-
-
-class TestApiEditRelease:
-    # Tests for PUT /api/release/<id>
     def test_api_edit_unsupported_image_url_returns_400(
         self, client, mock_release_data, mocker
     ):
@@ -386,85 +297,49 @@ class TestApiEditRelease:
         assert response.status_code == 400
         assert "No supported image type found" in response.get_json()["error"]
 
+    def test_edit_post_integrity_error_names_field(self, client, mock_release_data, mocker):
+        """A unique-constraint violation on save should name the offending field."""
+        from sqlalchemy.exc import IntegrityError
 
-class TestDelete:
-    # Tests for /delete
-    def test_delete_success(self, client, mock_release_data, mocker):
-        """
-        Test for proper handling of a successful deletion
-        """
-        mocker.patch("databass.db.delete")
-        mocker.patch("databass.db.models.Release.exists_by_id", return_value="a")
-        delete_data = {"id": 1, "type": "release"}
-        response = client.post("/delete", json=delete_data)
-        assert response.status_code == 302
-        assert response.location == "/"
-
-    def test_delete_fail_malformed_request(self, client):
-        """
-        Test for proper handling of a deletion request that is missing required data
-        """
-        delete_data = {"id": 1}
-        response = client.post("/delete", json=delete_data)
-        assert response.status_code == 302
-        assert response.location == "/error"
-
-    def test_delete_fail_non_existing_release(self, client, mocker):
-        """
-        Test for proper handling of a deletion request for a release that does not exist
-        """
-        mocker.patch("databass.db.models.Release.exists_by_id", return_value=False)
-        delete_data = {"id": 1, "type": "release"}
-        response = client.post("/delete", json=delete_data)
-        assert response.status_code == 302
-        assert response.location == "/error"
-
-    def test_delete_review_success_redirects_to_referrer(self, client, mocker):
-        """
-        Test that deleting a review redirects back to the referring page instead of home
-        """
-        mocker.patch("databass.db.delete")
-        mocker.patch("databass.db.models.Review.exists_by_id", return_value=mocker.MagicMock())
-        delete_data = {"id": 1, "type": "review"}
-        response = client.post(
-            "/delete", json=delete_data, headers={"Referer": "/release/1"}
+        mocker.patch("databass.db.construct_item", return_value=mock_release_data)
+        mocker.patch(
+            "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
-        assert response.status_code == 302
-        assert response.location == "/release/1"
-
-    def test_delete_fail_non_existing_review(self, client, mocker):
-        """
-        Test for proper handling of a deletion request for a review that does not exist,
-        checked against the correct model rather than always Release
-        """
-        mocker.patch("databass.db.models.Release.exists_by_id", return_value="a")
-        mocker.patch("databass.db.models.Review.exists_by_id", return_value=False)
-        delete_data = {"id": 1, "type": "review"}
-        response = client.post("/delete", json=delete_data)
-        assert response.status_code == 302
-        assert response.location == "/error"
-
+        mocker.patch(
+            "databass.releases.routes.db.update",
+            side_effect=IntegrityError(
+                "statement", {}, Exception("UNIQUE constraint failed: release.mbid")
+            ),
+        )
+        response = client.put(
+            "/api/release/1",
+            json={"name": "BLUE LIPS", "id": "1"},
+        )
+        assert response.status_code == 400
+        assert "mbid" in response.get_json()["error"]
+        assert "already exists" in response.get_json()["error"]
 
 class TestAddReview:
-    # Tests for /release/<id>/add_review
+    # Tests for POST /api/release/<id>/reviews
     def test_add_review_success(self, client, mock_release_data, mocker):
         """
-        Test for successful release addition
+        Test for successful review addition
         """
         mock_release = mocker.patch(
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
         mock_construct = mocker.patch("databass.db.construct_item")
         mock_insert = mocker.patch("databass.db.insert")
-
-        response = client.post(
-            "/release/1/add_review",
-            data={"id": 1, "text": "release review"},
-            headers={"Referer": "/release/1"},
+        mocker.patch(
+            "databass.releases.routes.build_release_detail", return_value={"id": 1}
         )
 
-        assert response.status_code == 302
-        assert response.location == "/release/1"
+        response = client.post(
+            "/api/release/1/reviews",
+            json={"text": "release review"},
+        )
+
+        assert response.status_code == 201
         mock_release.assert_called_once()
         mock_construct.assert_called_once()
         mock_insert.assert_called_once()
@@ -477,12 +352,10 @@ class TestAddReview:
             "databass.db.models.Release.exists_by_id", return_value=False
         )
         response = client.post(
-            "/release/1/add_review",
-            data={"id": 1, "text": "release review"},
-            headers={"Referer": "/release/1"},
+            "/api/release/1/reviews",
+            json={"text": "release review"},
         )
-        assert response.status_code == 302
-        assert response.location == "/error"
+        assert response.status_code == 404
         mock_release.assert_called_once()
 
     def test_add_review_fail_malformed_request(self, client, mock_release_data, mocker):
@@ -492,16 +365,13 @@ class TestAddReview:
         mock_release = mocker.patch(
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
-        response = client.post(
-            "/release/1/add_review", data={"id": 1}, headers={"Referer": "/release/1"}
-        )
-        assert response.status_code == 302
-        assert response.location == "/error"
+        response = client.post("/api/release/1/reviews", json={})
+        assert response.status_code == 400
         mock_release.assert_called_once()
 
 
 class TestEditReview:
-    # Tests for /release/<id>/edit_review
+    # Tests for PUT /api/release/<id>/reviews/<review_id>
     def test_edit_review_success(self, client, mock_release_data, mocker):
         """
         Test for successful editing of an existing review's text
@@ -514,15 +384,16 @@ class TestEditReview:
         mock_review.release_id = 1
         mocker.patch("databass.db.models.Review.exists_by_id", return_value=mock_review)
         mock_update = mocker.patch("databass.db.update")
-
-        response = client.post(
-            "/release/1/edit_review",
-            data={"id": 1, "text": "updated review text"},
-            headers={"Referer": "/release/1"},
+        mocker.patch(
+            "databass.releases.routes.build_release_detail", return_value={"id": 1}
         )
 
-        assert response.status_code == 302
-        assert response.location == "/release/1"
+        response = client.put(
+            "/api/release/1/reviews/1",
+            json={"text": "updated review text"},
+        )
+
+        assert response.status_code == 200
         assert mock_review.text == "updated review text"
         mock_update.assert_called_once_with(mock_review)
 
@@ -531,28 +402,21 @@ class TestEditReview:
         Test for proper handling of a request to edit a review on a release that does not exist
         """
         mocker.patch("databass.db.models.Release.exists_by_id", return_value=False)
-        response = client.post(
-            "/release/1/edit_review",
-            data={"id": 1, "text": "updated review text"},
-            headers={"Referer": "/release/1"},
+        response = client.put(
+            "/api/release/1/reviews/1",
+            json={"text": "updated review text"},
         )
-        assert response.status_code == 302
-        assert response.location == "/error"
+        assert response.status_code == 404
 
     def test_edit_review_fail_malformed_request(self, client, mock_release_data, mocker):
         """
-        Test for proper handling of a request missing the review id or text
+        Test for proper handling of a request missing the review text
         """
         mocker.patch(
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
-        response = client.post(
-            "/release/1/edit_review",
-            data={"id": 1},
-            headers={"Referer": "/release/1"},
-        )
-        assert response.status_code == 302
-        assert response.location == "/error"
+        response = client.put("/api/release/1/reviews/1", json={})
+        assert response.status_code == 400
 
     def test_edit_review_fail_non_existing_review(self, client, mock_release_data, mocker):
         """
@@ -562,13 +426,11 @@ class TestEditReview:
             "databass.db.models.Release.exists_by_id", return_value=mock_release_data
         )
         mocker.patch("databass.db.models.Review.exists_by_id", return_value=None)
-        response = client.post(
-            "/release/1/edit_review",
-            data={"id": 99, "text": "updated review text"},
-            headers={"Referer": "/release/1"},
+        response = client.put(
+            "/api/release/1/reviews/99",
+            json={"text": "updated review text"},
         )
-        assert response.status_code == 302
-        assert response.location == "/error"
+        assert response.status_code == 404
 
     def test_edit_review_fail_review_belongs_to_different_release(
         self, client, mock_release_data, mocker
@@ -583,10 +445,8 @@ class TestEditReview:
         mock_review.id = 1
         mock_review.release_id = 2
         mocker.patch("databass.db.models.Review.exists_by_id", return_value=mock_review)
-        response = client.post(
-            "/release/1/edit_review",
-            data={"id": 1, "text": "updated review text"},
-            headers={"Referer": "/release/1"},
+        response = client.put(
+            "/api/release/1/reviews/1",
+            json={"text": "updated review text"},
         )
-        assert response.status_code == 302
-        assert response.location == "/error"
+        assert response.status_code == 404

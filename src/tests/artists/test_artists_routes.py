@@ -26,34 +26,6 @@ class TestArtists:
         assert response.headers["Location"] == "/browse/artists"
 
 
-class TestArtist:
-    # Tests for /artist
-    def test_artist_successful_page_load(self, app, client):
-        import datetime
-
-        with app.app_context():
-            artist = Artist(
-                mbid="bce6d667-cde8-485e-b078-c0a05adea36d",
-                name="ScHoolboy Q",
-                begin=datetime.date(1986, 10, 26),
-                end=datetime.date(9999, 12, 31),
-                type="person",
-            )
-            app_db.session.add(artist)
-            app_db.session.commit()
-            artist_id = artist.id
-
-        response = client.get(f"/artist/{artist_id}")
-        assert response.status_code == 200
-        assert b"ScHoolboy Q" in response.data
-
-    def test_artist_not_found(self, client, mocker):
-        mocker.patch("databass.db.models.Artist.exists_by_id", return_value=False)
-        response = client.get("/artist/999")
-        assert response.status_code == 302
-        assert b"You should be redirected automatically" in response.data
-
-
 @pytest.fixture()
 def existing_artist(app):
     with app.app_context():
@@ -96,30 +68,6 @@ class TestArtistMissing:
     def test_artist_not_found(self, client):
         response = client.get("/api/artist/999999/missing")
         assert response.status_code == 404
-
-
-class TestEditArtist:
-    # Tests for /artist/<id>/edit
-    def test_edit_unsupported_image_url_flashes_error(self, client, mocker, existing_artist):
-        """
-        An image URL with an unsupported file type should redirect to the
-        error page with a specific message instead of crashing.
-        """
-        mocker.patch(
-            "databass.artists.routes.Util.get_image_from_url",
-            side_effect=ValueError(
-                "ERROR: No supported image type found in URL: https://example.com/page"
-            ),
-        )
-        response = client.post(
-            f"/artist/{existing_artist}/edit",
-            data={"image": "https://example.com/page"},
-        )
-        assert response.status_code == 302
-        assert response.location == "/error"
-
-        error_response = client.get("/error")
-        assert b"No supported image type found" in error_response.data
 
 
 class TestApiEditArtist:

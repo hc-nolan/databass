@@ -3,7 +3,6 @@ from datetime import datetime
 from decimal import Decimal
 from flask import Flask, g
 from flask.json.provider import DefaultJSONProvider
-from flask_assets import Environment, Bundle
 from dotenv import load_dotenv
 from .db.base import app_db
 from .db.util import ensure_db_placeholders
@@ -43,24 +42,8 @@ def create_app():
     app.static_folder = "static"
     app_db.init_app(app)
 
-    if not is_testing:
-        assets = Environment(app)
-        style_bundle = Bundle(
-            "src/less/*.less",
-            filters="less,cssmin",
-            output="dist/css/style.min.css",
-            extra={"rel": "stylesheet/css"},
-        )
-        assets.register("main_styles", style_bundle)
-        style_bundle.build()
-        js_bundle = Bundle(
-            "src/js/main.js", filters="jsmin", output="dist/js/main.min.js"
-        )
-        assets.register("main_js", js_bundle)
-        js_bundle.build()
-
     with app.app_context():
-        from .db.models import Base, Release, Artist, Label, Genre, Review, Goal
+        from .db.models import Base, Release
 
         Base.metadata.bind = app_db.engine
         Base.metadata.create_all(app_db.engine)
@@ -81,6 +64,10 @@ def create_app():
         from .errors.routes import error_bp
 
         app.register_blueprint(error_bp)
+
+        from .spa import spa_bp
+
+        app.register_blueprint(spa_bp)
 
         register_routes(app)
 

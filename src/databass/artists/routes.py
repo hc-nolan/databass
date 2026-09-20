@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, jsonify
+from flask import Blueprint, request, redirect, jsonify
 from sqlalchemy.exc import IntegrityError
 from ..db.models import Artist
 from ..api import Util
@@ -7,7 +7,7 @@ from ..decorators import load_or_404
 from ..detail import build_artist_detail, build_missing_releases
 from ..errors.util import friendly_message, integrity_error_message
 
-artist_bp = Blueprint("artist_bp", __name__, template_folder="templates")
+artist_bp = Blueprint("artist_bp", __name__)
 
 
 def _apply_artist_edit(artist_data: Artist, edit_data: dict) -> Artist:
@@ -34,47 +34,9 @@ def _apply_artist_edit(artist_data: Artist, edit_data: dict) -> Artist:
     return artist_data
 
 
-@artist_bp.route("/artist/<int:artist_id>", methods=["GET"])
-def artist(artist_id):
-    # Displays all info related to a particular artist
-    if artist_id == 0:
-        return redirect("/")
-    return _artist_detail(artist_id=artist_id)
-
-
-@load_or_404(Artist, "artist_id", inject_as="artist_data")
-def _artist_detail(artist_data):
-    return render_template(
-        "detail.html", active_page="browse", data=build_artist_detail(artist_data)
-    )
-
-
 @artist_bp.route("/artists", methods=["GET"])
 def artists():
     return redirect("/browse/artists", code=301)
-
-
-@artist_bp.route("/artist/<string:artist_id>/edit", methods=["GET", "POST"])
-@load_or_404(Artist, "artist_id", inject_as="artist_data")
-def edit_artist(artist_data):
-    if request.method == "GET":
-        countries = Artist.get_distinct_column_values("country")
-        countries = sorted([c for c in countries if c is not None])
-        return render_template(
-            "edit_artist.html", artist=artist_data, countries=countries
-        )
-
-    elif request.method == "POST":
-        edit_data = request.form.to_dict()
-        try:
-            _apply_artist_edit(artist_data, edit_data)
-        except IntegrityError as err:
-            flash(integrity_error_message(err))
-            return redirect("/error", code=302)
-        except Exception as err:
-            flash(friendly_message(err))
-            return redirect("/error", code=302)
-        return redirect(f"/artist/{artist_data.id}", code=302)
 
 
 # TODO: implement delete_artist

@@ -12,11 +12,8 @@ from os.path import join, abspath
 from itertools import groupby
 import flask
 from flask import (
-    render_template,
     request,
-    redirect,
     abort,
-    flash,
     make_response,
     send_file,
     jsonify,
@@ -437,7 +434,7 @@ def _goals_payload() -> dict:
 
 
 def _construct_goal_or_error(data: dict) -> tuple["models.Goal | None", str | None]:
-    """Shared goal-construction logic for /add_goal and /api/goals (POST)."""
+    """Shared goal-construction logic for /api/goals (POST)."""
     try:
         goal = db.construct_item(model_name="goal", data_dict=data)
         if not goal:
@@ -448,140 +445,6 @@ def _construct_goal_or_error(data: dict) -> tuple["models.Goal | None", str | No
 
 
 def register_routes(app):
-    @app.route("/", methods=["GET"])
-    @app.route("/home", methods=["GET"])
-    def home() -> str:
-        return render_template("index.html", active_page="home", **_home_payload())
-
-    @app.route("/home_release_table")
-    def home_release_table():
-        paged_groups, flask_pagination = _home_entries_payload()
-        return render_template(
-            "home_release_table.html",
-            groups=paged_groups,
-            pagination=flask_pagination,
-        )
-
-    @app.route("/new")
-    def new():
-        q = request.args.get("q", "").strip()
-        return render_template(
-            "new.html",
-            active_page="new",
-            q=q,
-            today=Util.today(),
-            **_new_payload(),
-        )
-
-    @app.route("/search", methods=["POST", "GET"])
-    def search() -> str | flask.Response:
-        if request.method == "GET":
-            return render_template("new_manual_entry.html")
-
-        results = _search_results(request.get_json())
-        if results is None:
-            flash("ERROR: Search requires at least one search term")
-            return redirect("/error")
-
-        return render_template("new_search_results.html", data=results)
-
-    @app.route("/submit", methods=["POST"])
-    def submit():
-        data = request.form.to_dict()
-        release_data = {}
-        match data.get("manual_submit"):
-            case "true":
-                release_data = get_manual_release_data(data)
-            case "false":
-                release_data = get_release_data(data)
-
-        try:
-            completed_goals = handle_submit_data(release_data)
-        except IntegrityError as err:
-            flash(integrity_error_message(err))
-            return redirect("/error")
-        except Exception as err:
-            flash(friendly_message(err))
-            return redirect("/error")
-
-        if completed_goals:
-            flash(
-                f"Goal completed: {completed_goals[0].amount} "
-                f"{_goal_type_label(completed_goals[0].type)} in {completed_goals[0].end.year}"
-            )
-        return redirect("/", code=302)
-
-    @app.route("/browse")
-    @app.route("/browse/<string:tab>")
-    def browse(tab="releases"):
-        if tab not in ("releases", "artists", "labels"):
-            abort(404)
-        counts = {
-            "releases": models.Release.total_count(),
-            "artists": models.Artist.total_count(),
-            "labels": models.Label.total_count(),
-        }
-        return render_template(
-            "browse.html",
-            active_page="browse",
-            tab=tab,
-            counts=counts,
-            filters=browse_filter_options(tab),
-        )
-
-    @app.route("/browse/<string:tab>/results")
-    def browse_results(tab):
-        if tab not in ("releases", "artists", "labels"):
-            abort(404)
-        return render_template(
-            "browse_results.html", tab=tab, **_browse_results_payload(tab)
-        )
-
-    @app.route("/stats", methods=["GET"])
-    def stats():
-        periods = stats2.available_periods()
-        period = request.args.get("period") or (periods[0]["key"] if periods else "all")
-        return render_template(
-            "stats.html",
-            periods=periods,
-            active_period=period,
-            stats=stats2.get_period_stats(period),
-            genres=stats2.get_genre_shares(),
-            active_page="stats",
-        )
-
-    @app.route("/stats/period/<string:period>", methods=["GET"])
-    def stats_period(period):
-        return render_template("stats_period.html", stats=stats2.get_period_stats(period))
-
-    @app.route("/stats/get/<string:stats_type>", methods=["GET"])
-    def stats_get(stats_type):
-        entity = models.Label if stats_type == "labels" else models.Artist
-        boards = stats2.build_leaderboards(entity)
-        return render_template("stats_data.html", type=stats_type, boards=boards)
-
-    @app.route("/goals", methods=["GET"])
-    def goals():
-        if request.method != "GET":
-            abort(405)
-        return render_template("goals.html", active_page="goals", **_goals_payload())
-
-    @app.route("/add_goal", methods=["POST"])
-    def add_goal():
-        data = request.form.to_dict()
-        if not data:
-            # TODO: move this error handling into errors/routes.py
-            flash("/add_goal received an empty payload")
-            return redirect("/error")
-        goal, error = _construct_goal_or_error(data)
-        if error:
-            # TODO: move this error handling into errors/routes.py
-            flash(error)
-            return redirect("/error")
-
-        db.insert(goal)
-        return redirect("/goals", 302)
-
     @app.route("/img/<string:itemtype>/<int:itemid>", methods=["GET"])
     def serve_image(itemtype: str, itemid: int):
         match itemtype:
@@ -602,10 +465,7 @@ def register_routes(app):
         return resp
 
     # ---------------------------------------------------------------
-    # JSON API for the SvelteKit frontend. Mirrors the routes above;
-    # once the frontend migration is complete, the render_template
-    # routes above (and their fragment/htmx-style endpoints) will be
-    # removed in favour of these.
+    # JSON API for the SvelteKit frontend.
     # ---------------------------------------------------------------
 
     @app.route("/api/home", methods=["GET"])
@@ -747,14 +607,6 @@ def register_routes(app):
             return jsonify({"error": f"No {item_type} with id {item_id} found."}), 404
         db.delete(item_type=item_type, item_id=item_id)
         return jsonify({"ok": True})
-
-    @app.template_filter("country_name")
-    def country_name_filter(code: Optional[str]) -> Optional[str]:
-        return country_name(code)
-
-    @app.template_filter("country_code")
-    def country_code_filter(country: str) -> Optional[str]:
-        return country_code(country)
 
 
 def country_name(code: Optional[str]) -> Optional[str]:

@@ -1,6 +1,7 @@
 import pytest
 from databass import create_app
 from databass.db.models import Goal
+from databass.routes import country_code
 from datetime import datetime
 
 
@@ -13,26 +14,26 @@ def client():
 
 
 class TestHome:
-    # Tests for /, /home
+    # Tests for /api/home
     def test_home_page_load_success(self, client):
-        response = client.get("/")
+        response = client.get("/api/home")
         assert response.status_code == 200
-        assert b"home_release_table" in response.data
+        assert "total_logged" in response.json
 
 
 class TestNew:
-    # Tests for /new
+    # Tests for /api/new
     def test_new_page_load_success(self, client):
-        response = client.get("/new")
+        response = client.get("/api/new")
         assert response.status_code == 200
-        assert b"new_release" in response.data
+        assert "today" in response.json
 
 
 class TestSearch:
-    # Tests for /search
+    # Tests for /api/search
     def test_search_page_load_success(self, client, mocker):
         """
-        Test for successful page load
+        Test for successful search
         """
         mocker.patch(
             "databass.api.MusicBrainz.release_search",
@@ -45,7 +46,7 @@ class TestSearch:
             ],
         )
         response = client.post(
-            "/search",
+            "/api/search",
             json={
                 "referrer": "search",
                 "release": "search",
@@ -54,15 +55,15 @@ class TestSearch:
             },
         )
         assert response.status_code == 200
-        assert b"data_form" in response.data
+        assert len(response.json["results"]) == 1
 
     def test_search_page_load_success_no_results(self, client, mocker):
         """
-        Test for successful page load when no search results are found
+        Test for successful handling when no search results are found
         """
         mocker.patch("databass.api.MusicBrainz.release_search", return_value=[])
         response = client.post(
-            "/search",
+            "/api/search",
             json={
                 "referrer": "search",
                 "release": "search",
@@ -71,43 +72,36 @@ class TestSearch:
             },
         )
         assert response.status_code == 200
-        assert b"No search results" in response.data
+        assert response.json["results"] == []
 
     def test_search_malformed_request_no_search_terms(self, client):
-        """
-        Test for successful page load
-        """
         response = client.post(
-            "/search",
+            "/api/search",
             json={"referrer": "search", "release": None, "artist": None, "label": None},
         )
-        assert response.status_code == 302
-        assert response.location == "/error"
+        assert response.status_code == 400
+        assert "error" in response.json
 
     def test_search_non_json(self, client):
         """
         Test for successful handling of a request missing JSON data
         """
-        response = client.post("/search")
+        response = client.post("/api/search")
         assert response.status_code == 415
 
 
 class TestSubmit:
-    # Tests for /submit
-    # TODO: make compatible with manual submission after routes.submit_manual() is merged into routes.submit()
+    # Tests for /api/submit
     def test_submit_malformed_request(self, client):
-        """
-        Test for successful handling of a request missing required data
-        """
-        response = client.post("/submit")
-        assert response.status_code == 302
-        assert response.location == "/error"
+        response = client.post("/api/submit", json={})
+        assert response.status_code == 500
+        assert "error" in response.json
 
     @pytest.mark.parametrize(
         "data_dict",
         [
             {
-                "manual_submit": "false",
+                "manual_submit": False,
                 "artist": "Silly Goose",
                 "artist_mbid": "da677401-713b-4b4a-969f-a0a6655fe2d3",
                 "country": "",
@@ -127,7 +121,7 @@ class TestSubmit:
                 "artist": "asfd",
                 "main_genre": "asdf",
                 "label": "asdf",
-                "manual_submit": "true",
+                "manual_submit": True,
                 "name": "asdf",
                 "rating": "50",
                 "year": "2100",
@@ -136,23 +130,19 @@ class TestSubmit:
         ],
     )
     def test_submit_successful_page_load(self, client, mocker, data_dict):
-        """Test for successful submission and redirection"""
+        """Test for successful submission"""
+        mock_handler = mocker.patch(
+            "databass.routes.handle_submit_data", return_value=[]
+        )
 
-        # Mock the handle_submit_data function
-        mock_handler = mocker.patch("databass.routes.handle_submit_data")
+        response = client.post("/api/submit", json=data_dict)
 
-        # Ensure that the mock handler is correctly called in the test
-        response = client.post("/submit", data=data_dict)
-
-        # Assert the response contains "redirected" in the data and that it's a 302 redirect
-        assert b"redirected" in response.data
-        assert response.status_code == 302
-
-        # Check if handle_submit_data was called
+        assert response.status_code == 201
+        assert response.json["ok"] is True
         mock_handler.assert_called_once()
 
     def test_submit_integrity_error_shows_field_specific_message(self, client, mocker):
-        """A unique-constraint violation should flash which field caused it."""
+        """A unique-constraint violation should surface which field caused it."""
         from sqlalchemy.exc import IntegrityError
 
         mocker.patch(
@@ -162,7 +152,7 @@ class TestSubmit:
             ),
         )
         data = {
-            "manual_submit": "true",
+            "manual_submit": True,
             "artist": "asdf",
             "main_genre": "asdf",
             "label": "asdf",
@@ -171,13 +161,10 @@ class TestSubmit:
             "year": "2100",
             "genres": "asdf",
         }
-        response = client.post("/submit", data=data)
-        assert response.status_code == 302
-        assert response.location == "/error"
-
-        error_response = client.get("/error")
-        assert b"mbid" in error_response.data
-        assert b"already exists" in error_response.data
+        response = client.post("/api/submit", json=data)
+        assert response.status_code == 400
+        assert "mbid" in response.json["error"]
+        assert "already exists" in response.json["error"]
 
     def test_submit_unexpected_error_is_flashed_not_500(self, client, mocker):
         """Any other unexpected exception should also be surfaced, not crash."""
@@ -186,7 +173,7 @@ class TestSubmit:
             side_effect=ValueError("ERROR: No supported image type found in URL: x"),
         )
         data = {
-            "manual_submit": "true",
+            "manual_submit": True,
             "artist": "asdf",
             "main_genre": "asdf",
             "label": "asdf",
@@ -195,50 +182,50 @@ class TestSubmit:
             "year": "2100",
             "genres": "asdf",
         }
-        response = client.post("/submit", data=data)
-        assert response.status_code == 302
-        assert response.location == "/error"
-
-        error_response = client.get("/error")
-        assert b"No supported image type found" in error_response.data
+        response = client.post("/api/submit", json=data)
+        assert response.status_code == 400
+        assert "No supported image type found" in response.json["error"]
 
 
 class TestStats:
-    # Tests for /stats
+    # Tests for /api/stats
     def test_stats_page_load_success(self, client):
-        response = client.get("/stats")
+        response = client.get("/api/stats")
         assert response.status_code == 200
-        assert b"Listening habits" in response.data
+        assert "stats" in response.json
 
     def test_stats_period_ajax(self, client):
-        response = client.get("/stats/period/all")
+        response = client.get("/api/stats/period/all")
         assert response.status_code == 200
-        assert b"WHEN YOU LISTEN" in response.data
+        assert "stats" in response.json
 
     def test_stats_get_artists(self, client):
-        response = client.get("/stats/get/artists")
+        response = client.get("/api/stats/leaderboards/artists")
         assert response.status_code == 200
+        assert "boards" in response.json
 
     def test_stats_get_labels(self, client):
-        response = client.get("/stats/get/labels")
+        response = client.get("/api/stats/leaderboards/labels")
         assert response.status_code == 200
+        assert "boards" in response.json
 
 
 class TestGoals:
-    # Tests for /goals route
+    # Tests for /api/goals (GET)
     def test_goals_no_active_goal(self, client, mocker):
         """
         Test for correct handling when there is no active (incomplete) goal
         """
         mocker.patch("databass.db.models.Goal.get_incomplete", return_value=[])
         mocker.patch("databass.db.models.Goal.get_past", return_value=[])
-        response = client.get("/goals")
+        response = client.get("/api/goals")
         assert response.status_code == 200
-        assert b"No existing goals" in response.data
+        assert response.json["active_goal"] is None
+        assert response.json["past_goals"] == []
 
     def test_goals_active_goal_displayed(self, client, mocker):
         """
-        Test that the most recent incomplete goal is rendered as the active goal
+        Test that the most recent incomplete goal is returned as the active goal
         """
         active = Goal(
             id=1,
@@ -250,14 +237,14 @@ class TestGoals:
         )
         mocker.patch("databass.db.models.Goal.get_incomplete", return_value=[active])
         mocker.patch("databass.db.models.Goal.get_past", return_value=[])
-        response = client.get("/goals")
+        response = client.get("/api/goals")
         assert response.status_code == 200
-        assert b"ACTIVE GOAL" in response.data
-        assert b"250 releases" in response.data
+        assert response.json["active_goal"]["target"] == 250
+        assert response.json["active_goal"]["type_label"] == "releases"
 
     def test_goals_past_goals_displayed(self, client, mocker):
         """
-        Test that completed and missed goals are rendered under "past goals"
+        Test that completed and missed goals are returned under "past"
         """
         completed = Goal(
             id=2,
@@ -279,23 +266,23 @@ class TestGoals:
         mocker.patch(
             "databass.db.models.Goal.get_past", return_value=[completed, missed]
         )
-        response = client.get("/goals")
+        response = client.get("/api/goals")
         assert response.status_code == 200
-        assert b"COMPLETE" in response.data
-        assert b"MISSED" in response.data
-        assert b"100 releases" in response.data
-        assert b"50 artists" in response.data
+        past_goals = response.json["past_goals"]
+        badges = {g["badge"] for g in past_goals}
+        titles = {g["title"] for g in past_goals}
+        assert "COMPLETE" in badges
+        assert "MISSED" in badges
+        assert "100 releases" in titles
+        assert "50 artists" in titles
 
 
 class TestAddGoal:
-    # Tests for /add_goal
+    # Tests for /api/goals (POST)
     def test_add_goals_no_payload(self, client):
-        """
-        Test for successful handling of empty payload
-        """
-        response = client.post("/add_goal")
-        assert response.status_code == 302
-        assert response.location == "/error"
+        response = client.post("/api/goals", json={})
+        assert response.status_code == 400
+        assert "error" in response.json
 
     def test_add_goals_goal_construction_error(self, client, mocker):
         """
@@ -308,9 +295,9 @@ class TestAddGoal:
             "type": "release",
         }
         mocker.patch("databass.db.construct_item", return_value=None)
-        response = client.post("/add_goal", data=data)
-        assert response.status_code == 302
-        assert response.location == "/error"
+        response = client.post("/api/goals", json=data)
+        assert response.status_code == 400
+        assert "error" in response.json
 
     @pytest.mark.parametrize(
         "amount,end_goal,start_date,goal_type",
@@ -337,63 +324,51 @@ class TestAddGoal:
             "start_date": start_date,
             "type": goal_type,
         }
-        response = client.post("/add_goal", data=data)
+        response = client.post("/api/goals", json=data)
 
-        mock_goal.assert_called_once_with(
-            model_name="goal",
-            data_dict={
-                "amount": amount,
-                "end_goal": end_goal,
-                "start_date": start_date,
-                "type": goal_type,
-            },
-        )
-        assert response.status_code == 302
-        assert response.location == "/goals"
+        mock_goal.assert_called_once_with(model_name="goal", data_dict=data)
+        assert response.status_code == 201
+        assert response.json["ok"] is True
         mock_insert.assert_called_once_with(mock_goal.return_value)
 
 
 class TestCountryCode:
-    def test_country_code_with_valid_country(self, client):
-        country_code = client.application.jinja_env.filters["country_code"]
+    def test_country_code_with_valid_country(self):
+        assert country_code("United States") == "US"
 
-        def test_filter(country: str):
-            return country_code(country)
+    def test_country_code_with_code(self):
+        assert country_code("US") == "US"
 
-        assert test_filter("United States") == "US"
+    def test_country_code_with_invalid_country(self):
+        assert country_code("Invalid Country") == "Invalid Country"
 
-    def test_country_code_with_code(self, client):
-        country_code = client.application.jinja_env.filters["country_code"]
+    def test_country_code_with_none(self):
+        assert country_code(None) is None
 
-        def test_filter(country: str):
-            return country_code(country)
-
-        assert test_filter("US") == "US"
-
-    def test_country_code_with_invalid_country(self, client):
-        country_code = client.application.jinja_env.filters["country_code"]
-
-        def test_filter(country: str):
-            return country_code(country)
-
-        assert test_filter("Invalid Country") == "Invalid Country"
-
-    def test_country_code_with_none(self, client):
-        country_code = client.application.jinja_env.filters["country_code"]
-
-        def test_filter(country: str):
-            return country_code(country)
-
-        assert test_filter(None) is None
-
-    def test_country_code_with_partial_match(self, client, mocker):
+    def test_country_code_with_partial_match(self, mocker):
         mock_lookup = mocker.patch("pycountry.countries.lookup")
         mock_lookup.side_effect = KeyError
 
-        country_code = client.application.jinja_env.filters["country_code"]
-
-        def test_filter(country: str):
-            return country_code(country)
-
-        assert test_filter("United") == "United"
+        assert country_code("United") == "United"
         mock_lookup.assert_called_once_with("United")
+
+
+class TestApiDelete:
+    # Tests for DELETE /api/<item_type>/<item_id>
+    def test_delete_success(self, client, mocker):
+        mocker.patch("databass.db.models.Release.exists_by_id", return_value=True)
+        mock_delete = mocker.patch("databass.db.delete")
+        response = client.delete("/api/release/1")
+        assert response.status_code == 200
+        assert response.json["ok"] is True
+        mock_delete.assert_called_once_with(item_type="release", item_id=1)
+
+    def test_delete_fail_unsupported_item_type(self, client):
+        response = client.delete("/api/unsupported/1")
+        assert response.status_code == 404
+
+    def test_delete_fail_non_existing_item(self, client, mocker):
+        mocker.patch("databass.db.models.Review.exists_by_id", return_value=False)
+        response = client.delete("/api/review/1")
+        assert response.status_code == 404
+        assert "error" in response.json
