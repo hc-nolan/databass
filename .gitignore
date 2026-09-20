@@ -9,10 +9,7 @@ src/databass/static/img/*
 pg_data
 images*
 *backup*
-src/databass/static/dist/*
-*webassets-cache*
-style.css.map
-src/databass/static/src/less/style.css
+src/frontend_build
 *migrations*
 .claude
 .serena

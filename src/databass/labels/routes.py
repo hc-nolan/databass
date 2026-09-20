@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, flash, redirect, jsonify
+from flask import Blueprint, request, redirect, jsonify
 from sqlalchemy.exc import IntegrityError
 from ..db.models import Label
 from ..db import update
@@ -7,7 +7,7 @@ from ..decorators import load_or_404
 from ..detail import build_label_detail
 from ..errors.util import friendly_message, integrity_error_message
 
-label_bp = Blueprint("label_bp", __name__, template_folder="templates")
+label_bp = Blueprint("label_bp", __name__)
 
 
 def _apply_label_edit(label_data: Label, edit_data: dict) -> Label:
@@ -34,44 +34,9 @@ def _apply_label_edit(label_data: Label, edit_data: dict) -> Label:
     return label_data
 
 
-@label_bp.route("/label/<int:label_id>", methods=["GET"])
-def label(label_id):
-    if label_id == 0:
-        return redirect("/")
-    return _label_detail(label_id=label_id)
-
-
-@load_or_404(Label, "label_id", inject_as="label_data")
-def _label_detail(label_data):
-    return render_template(
-        "detail.html", active_page="browse", data=build_label_detail(label_data)
-    )
-
-
 @label_bp.route("/labels", methods=["GET"])
 def labels():
     return redirect("/browse/labels", code=301)
-
-
-@label_bp.route("/label/<string:label_id>/edit", methods=["GET", "POST"])
-@load_or_404(Label, "label_id", inject_as="label_data")
-def edit_label(label_data):
-    if request.method == "GET":
-        countries = Label.get_distinct_column_values("country")
-        countries = sorted([c for c in countries if c is not None])
-        return render_template("edit_label.html", label=label_data, countries=countries)
-
-    elif request.method == "POST":
-        edit_data = request.form.to_dict()
-        try:
-            _apply_label_edit(label_data, edit_data)
-        except IntegrityError as err:
-            flash(integrity_error_message(err))
-            return redirect("/error", code=302)
-        except Exception as err:
-            flash(friendly_message(err))
-            return redirect("/error", code=302)
-        return redirect(f"/label/{label_data.id}", code=302)
 
 
 # TODO: implement delete_label

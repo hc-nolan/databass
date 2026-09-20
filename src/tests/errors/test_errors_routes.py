@@ -16,17 +16,6 @@ def client(app):
 
 
 class TestUncaughtExceptionHandler:
-    def test_uncaught_exception_on_page_route_redirects_to_error(self, client, mocker):
-        mocker.patch(
-            "databass.db.models.Goal.get_incomplete", side_effect=RuntimeError("boom")
-        )
-        response = client.get("/")
-        assert response.status_code == 302
-        assert response.location == "/error"
-
-        error_response = client.get("/error")
-        assert b"boom" in error_response.data
-
     def test_uncaught_exception_on_api_route_returns_json_500(self, client, mocker):
         mocker.patch(
             "databass.db.models.Goal.get_incomplete", side_effect=RuntimeError("boom")
@@ -35,6 +24,11 @@ class TestUncaughtExceptionHandler:
         assert response.status_code == 500
         assert response.get_json()["error"] == "boom"
 
-    def test_404_still_uses_dedicated_handler(self, client):
+    def test_404_when_no_frontend_build_present(self, client):
+        """
+        Catch-all route falls back to a plain 404 when the SvelteKit build
+        (frontend_build/) isn't present -- the case in test/CI environments,
+        which never run `pnpm build`.
+        """
         response = client.get("/this-route-does-not-exist")
         assert response.status_code == 404

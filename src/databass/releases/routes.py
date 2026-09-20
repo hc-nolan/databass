@@ -1,14 +1,13 @@
 from datetime import datetime
-from flask import Blueprint, render_template, request, redirect, flash, jsonify
-from sqlalchemy.exc import IntegrityError
+from flask import Blueprint, request, redirect, jsonify
 from .. import db
 from ..db import models
 from ..api import Util
 from ..decorators import load_or_404
 from ..detail import build_release_detail
-from ..errors.util import friendly_message, integrity_error_message
+from ..errors.util import friendly_message
 
-release_bp = Blueprint("release_bp", __name__, template_folder="templates")
+release_bp = Blueprint("release_bp", __name__)
 
 
 def _release_edit_data(release_data: models.Release) -> dict:
@@ -35,7 +34,7 @@ def _release_edit_data(release_data: models.Release) -> dict:
 
 
 def _apply_release_edit(release_data: models.Release, edit_data: dict) -> models.Release:
-    """Shared edit logic for the form-encoded and JSON edit endpoints."""
+    """Shared edit logic for the release edit endpoint."""
     submit_data = {}
 
     image = edit_data.get("image")
@@ -101,123 +100,6 @@ def _apply_release_edit(release_data: models.Release, edit_data: dict) -> models
     updated_release.track_count = release_data.track_count
     db.update(updated_release)
     return updated_release
-
-
-@release_bp.route("/release/<string:release_id>", methods=["GET"])
-@load_or_404(models.Release, "release_id", inject_as="release_data")
-def release(release_data):
-    # Displays all info related to a particular release
-    return render_template(
-        "detail.html", active_page="browse", data=build_release_detail(release_data)
-    )
-
-
-@release_bp.route("/release/<string:release_id>/relisten", methods=["POST"])
-@load_or_404(models.Release, "release_id", inject_as="release_data")
-def relisten(release_data):
-    # Logs a new listen of an existing release: bumps the listen date and
-    # appends a diary entry so re-listens read as history, not an overwrite.
-    release_data.listen_date = datetime.now()
-    db.update(release_data)
-    new_review = db.construct_item(
-        "review", {"release_id": release_data.id, "text": "Logged another listen."}
-    )
-    db.insert(new_review)
-    return redirect(f"/release/{release_data.id}", code=302)
-
-
-@release_bp.route("/release/<string:release_id>/edit", methods=["GET", "POST"])
-@load_or_404(models.Release, "release_id", inject_as="release_data")
-def edit(release_data):
-    if request.method == "GET":
-        try:
-            release_image = release_data.image[1:]
-        except TypeError:
-            release_image = None
-        label_data = models.Label.exists_by_id(release_data.label_id)
-        artist_data = models.Artist.exists_by_id(release_data.artist_id)
-        countries = sorted(models.Release.get_distinct_column_values("country"))
-        return render_template(
-            "edit.html",
-            release=release_data,
-            artist=artist_data,
-            label=label_data,
-            image=release_image,
-            countries=countries,
-        )
-    if request.method == "POST":
-        edit_data = request.form.to_dict()
-        edit_data["genres"] = request.form.getlist("genres")
-        edit_data["collab_artists"] = request.form.getlist("collab_artists")
-        try:
-            _apply_release_edit(release_data, edit_data)
-        except IntegrityError as err:
-            flash(integrity_error_message(err))
-            return redirect("/error", code=302)
-        except Exception as err:  # pylint: disable=broad-exception-caught
-            flash(friendly_message(err))
-            return redirect("/error", code=302)
-        return redirect("/", 302)
-
-
-@release_bp.route("/delete", methods=["POST"])
-def delete():
-    data = request.get_json()
-    try:
-        deletion_id = data["id"]
-        deletion_type = data["type"]
-    except KeyError:
-        error = "Deletion request missing one of the required variables (ID or type)"
-        flash(error)
-        return redirect("/error", code=302)
-
-    if not db.get_model(deletion_type).exists_by_id(deletion_id):
-        error = f"No {deletion_type} with id {deletion_id} found."
-        flash(error)
-        return redirect("/error", code=302)
-    print(f"Deleting {deletion_type} {deletion_id}")
-    db.delete(item_type=deletion_type, item_id=deletion_id)
-    if deletion_type == "review":
-        return redirect(request.referrer, 302)
-    return redirect("/", 302)
-
-
-@release_bp.route("/release/<string:release_id>/add_review", methods=["POST"])
-@load_or_404(models.Release, "release_id", inject_as="release_data")
-def add_review(release_data):
-    # Ensure request has required data
-    review_data = request.form.to_dict()
-    if "text" not in review_data.keys():
-        error = "Request missing one of the required variables: text"
-        flash(error)
-        return redirect("/error", code=302)
-
-    # Construct and add the review
-    new_review = db.construct_item("review", review_data)
-    db.insert(new_review)
-    return redirect(request.referrer, 302)
-
-
-@release_bp.route("/release/<string:release_id>/edit_review", methods=["POST"])
-@load_or_404(models.Release, "release_id", inject_as="release_data")
-def edit_review(release_data):
-    # Ensure request has required data
-    review_data = request.form.to_dict()
-    if "id" not in review_data.keys() or "text" not in review_data.keys():
-        error = "Request missing one of the required variables: id, text"
-        flash(error)
-        return redirect("/error", code=302)
-
-    # Edit the review
-    review = models.Review.exists_by_id(review_data["id"])
-    if not review or review.release_id != release_data.id:
-        error = f"No review with ID {review_data['id']} found for release {release_data.id}"
-        flash(error)
-        return redirect("/error", code=302)
-    review.text = review_data["text"]
-    db.update(review)
-
-    return redirect(request.referrer, 302)
 
 
 @release_bp.route("/releases", methods=["GET"])
