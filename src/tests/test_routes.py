@@ -141,6 +141,13 @@ class TestArt:
         assert response.status_code == 400
         assert "error" in response.json
 
+    def test_art_search_artist_only_returns_400(self, client):
+        """Artist alone can't produce candidates, so it shouldn't pass validation."""
+        response = client.post("/api/art", json={"artist": "Radiohead"})
+
+        assert response.status_code == 400
+        assert "error" in response.json
+
     def test_art_search_non_json(self, client):
         response = client.post("/api/art")
 

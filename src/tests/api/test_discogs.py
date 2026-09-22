@@ -443,6 +443,22 @@ class TestGetReleaseImages:
             },
         ]
 
+    def test_uses_short_timeouts(self, mocker):
+        """The picker path bounds its Discogs requests with a short timeout."""
+        mock_get_item_id = mocker.patch.object(
+            Discogs, "get_item_id", return_value="123"
+        )
+        mock_request = mocker.patch.object(
+            Discogs, "request", return_value={"images": []}
+        )
+
+        Discogs.get_release_images(name="Test Album", artist="Test Artist")
+
+        mock_get_item_id.assert_called_once_with(
+            name="Test Album", artist="Test Artist", item_type="release", timeout=10
+        )
+        mock_request.assert_called_once_with("/releases/123", timeout=10)
+
     def test_square_images_first(self, mocker):
         mock_response = {
             "images": [

@@ -433,13 +433,14 @@ class MusicBrainz:
             url = img.get("image")
             if not url:
                 continue
-            types = img.get("types") or []
+            types = img.get("types")
+            candidate_types = types if isinstance(types, list) else None
             candidates.append(
                 {
                     "source": "caa",
                     "url": url,
                     "thumb": (img.get("thumbnails") or {}).get("large") or url,
-                    "label": types[0] if types else None,
+                    "label": candidate_types[0] if candidate_types else None,
                 }
             )
         # Front covers first, then the rest

@@ -1,6 +1,6 @@
 import datetime
 import pytest
-from databass.api.util import Util
+from databass.api.util import Util, IMAGE_REDIRECT_LIMIT
 
 VALID_JPEG_BYTES = bytes([0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46])
 VALID_PNG_BYTES = bytes([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
@@ -174,12 +174,15 @@ class TestGetImageFromUrl:
     def test_url_with_extension_uses_url_detection(self, mocker):
         """URLs already carrying a supported extension keep using URL detection."""
         mock_response = mocker.Mock()
+        mock_response.status_code = 200
         mock_response.content = VALID_JPEG_BYTES
         mocker.patch("databass.api.util.requests.get", return_value=mock_response)
         mocker.patch("databass.api.util.Path.mkdir")
         self._patch_open(mocker)
 
-        result = Util.get_image_from_url("https://example.com/image.jpeg", "release")
+        result = Util.get_image_from_url(
+            "https://i.discogs.com/image.jpeg", "release"
+        )
 
         assert result.startswith("./static/img/release/")
         assert result.endswith(".jpeg")
@@ -190,6 +193,7 @@ class TestGetImageFromUrl:
         downloaded bytes for the file type.
         """
         mock_response = mocker.Mock()
+        mock_response.status_code = 200
         mock_response.content = VALID_PNG_BYTES
         mocker.patch("databass.api.util.requests.get", return_value=mock_response)
         mocker.patch("databass.api.util.Path.mkdir")
@@ -205,6 +209,7 @@ class TestGetImageFromUrl:
     def test_unrecognizable_bytes_raise(self, mocker):
         """Bytes that match neither a URL extension nor a known signature raise."""
         mock_response = mocker.Mock()
+        mock_response.status_code = 200
         mock_response.content = INVALID_BYTES
         mocker.patch("databass.api.util.requests.get", return_value=mock_response)
         mocker.patch("databass.api.util.Path.mkdir")
@@ -214,3 +219,100 @@ class TestGetImageFromUrl:
             Util.get_image_from_url(
                 "https://coverartarchive.org/release-group/abc/front", "release"
             )
+
+    @pytest.mark.parametrize(
+        "url",
+        [
+            "http://coverartarchive.org/release-group/abc/front",  # not https
+            "https://example.com/image.png",  # not a known host
+            "https://coverartarchive.org.evil.com/release/a/front",  # lookalike host
+            "https://169.254.169.254/latest/meta-data?x=.jpg",  # internal address
+            "ftp://coverartarchive.org/image",  # wrong scheme
+            "not a url",
+        ],
+    )
+    def test_disallowed_urls_raise(self, mocker, url):
+        """Non-https or non-allowlisted image URLs are rejected before fetching."""
+        mock_get = mocker.patch("databass.api.util.requests.get")
+
+        with pytest.raises(ValueError, match="known provider"):
+            Util.get_image_from_url(url, "release")
+
+        mock_get.assert_not_called()
+
+    def test_redirects_are_revalidated(self, mocker):
+        """A redirect to an allowlisted host is followed; one elsewhere is not."""
+        bad_response = mocker.Mock()
+        bad_response.status_code = 302
+        bad_response.headers = {
+            "Location": "https://coverartarchive.org/release/rel-1/front"
+        }
+        good_response = mocker.Mock()
+        good_response.status_code = 200
+        good_response.content = VALID_JPEG_BYTES
+        mocker.patch(
+            "databass.api.util.requests.get",
+            side_effect=[bad_response, good_response],
+        )
+        mocker.patch("databass.api.util.Path.mkdir")
+        self._patch_open(mocker)
+
+        result = Util.get_image_from_url(
+            "https://i.discogs.com/short-link", "release"
+        )
+
+        assert result.endswith(".jpg")
+
+    def test_redirect_to_archive_org_is_allowed(self, mocker):
+        """CAA serves full-size images via a redirect to archive.org."""
+        redirect_response = mocker.Mock()
+        redirect_response.status_code = 302
+        redirect_response.headers = {
+            "Location": "https://archive.org/download/mbid-123/cover.png"
+        }
+        final_response = mocker.Mock()
+        final_response.status_code = 200
+        final_response.content = VALID_PNG_BYTES
+        mocker.patch(
+            "databass.api.util.requests.get",
+            side_effect=[redirect_response, final_response],
+        )
+        mocker.patch("databass.api.util.Path.mkdir")
+        self._patch_open(mocker)
+
+        result = Util.get_image_from_url(
+            "https://coverartarchive.org/release/rel-1/front", "release"
+        )
+
+        assert result.endswith(".png")
+
+    def test_redirect_off_allowlist_raises(self, mocker):
+        """Redirects that leave the known hosts are rejected."""
+        bad_response = mocker.Mock()
+        bad_response.status_code = 302
+        bad_response.headers = {"Location": "https://internal.example.com/meta"}
+        mocker.patch(
+            "databass.api.util.requests.get", return_value=bad_response
+        )
+
+        with pytest.raises(ValueError, match="known provider"):
+            Util.get_image_from_url(
+                "https://coverartarchive.org/release/rel-1/front", "release"
+            )
+
+    def test_redirect_loop_raises(self, mocker):
+        """Redirect loops are cut off instead of being followed forever."""
+
+        def fake_get(url, **kwargs):
+            resp = mocker.Mock()
+            resp.status_code = 302
+            resp.headers = {"Location": "https://i.discogs.com/loop"}
+            return resp
+
+        mock_get = mocker.patch("databass.api.util.requests.get", side_effect=fake_get)
+
+        with pytest.raises(ValueError, match="Too many redirects"):
+            Util.get_image_from_url("https://i.discogs.com/loop", "release")
+
+        # the loop is cut off after the redirect limit, not followed forever
+        assert len(mock_get.call_args_list) == IMAGE_REDIRECT_LIMIT + 1

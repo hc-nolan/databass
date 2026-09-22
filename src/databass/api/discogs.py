@@ -62,13 +62,18 @@ class Discogs:
         )
 
     @staticmethod
-    def request(endpoint: str) -> Dict[str, Any]:
+    def request(endpoint: str, timeout: int = 60) -> Dict[str, Any]:
         """
         Sends request to an endpoint then updates rate limit count
         Returns json if response code is 200
+
+        Args:
+            endpoint (str): The Discogs API endpoint to request.
+            timeout (int): Request timeout in seconds. Use a short value for
+                latency-sensitive callers (e.g. the art picker).
         """
         resp = requests.get(
-            urljoin(Discogs.url, endpoint), headers=Discogs.headers, timeout=60
+            urljoin(Discogs.url, endpoint), headers=Discogs.headers, timeout=timeout
         )
         Discogs.update_rate_limit(resp)
         if Discogs.is_throttled() is True:
@@ -80,7 +85,10 @@ class Discogs:
 
     @staticmethod
     def get_item_id(
-        name: str, item_type: str, artist: Optional[str] = None
+        name: str,
+        item_type: str,
+        artist: Optional[str] = None,
+        timeout: int = 60,
     ) -> Optional[str]:
         """
         Gets the ID for the specified item type and name.
@@ -89,6 +97,7 @@ class Discogs:
             name (str): The name of the item to search for.
             item_type (str): The type of item to search for, e.g. 'release'.
             artist (str, optional): The artist name to filter the search by.
+            timeout (int): Request timeout in seconds; see ``Discogs.request``.
 
         Returns:
             str or None: The ID of the item if found, None otherwise.
@@ -106,7 +115,7 @@ class Discogs:
         print(f"Search endpoint: {endpoint}")
 
         try:
-            res = Discogs.request(endpoint)
+            res = Discogs.request(endpoint, timeout=timeout)
         except requests.RequestException:
             return None
 
@@ -226,12 +235,14 @@ class Discogs:
         if not name or not isinstance(name, str):
             return []
 
-        release_id = Discogs.get_item_id(name=name, artist=artist, item_type="release")
+        release_id = Discogs.get_item_id(
+            name=name, artist=artist, item_type="release", timeout=10
+        )
         if not release_id:
             return []
 
         try:
-            res = Discogs.request(f"/releases/{release_id}")
+            res = Discogs.request(f"/releases/{release_id}", timeout=10)
         except requests.RequestException:
             return []
 

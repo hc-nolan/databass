@@ -816,6 +816,18 @@ class TestGetImageCandidates:
 
         assert result[0]["label"] is None
 
+    def test_string_types_uses_none_label(self, mocker):
+        """A non-list ``types`` value shouldn't be treated as a string of chars."""
+        listing = {"images": [{"id": "c1", "image": "http://img/1", "types": "Front"}]}
+        mocker.patch(
+            "databass.api.musicbrainz.requests.get",
+            return_value=self._caa_response(mocker, listing),
+        )
+
+        result = MusicBrainz.get_image_candidates(release_group_mbid="rg-1")
+
+        assert result[0]["label"] is None
+
     @pytest.mark.parametrize(
         "kwargs",
         [

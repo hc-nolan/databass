@@ -1,4 +1,5 @@
 import datetime
+import urllib.parse
 from os import getenv
 from pathlib import Path
 from typing import Literal, Optional
@@ -26,6 +27,17 @@ SUPPORTED_EXTENSIONS = {
     ".webp",
 }
 IMG_BASE_PATH = "./databass/static/img"
+
+# The only image hosts the app is allowed to download from. Restricting
+# `get_image_from_url` here (rather than at individual call sites) keeps every
+# flow — the /api/submit art choice, release editing, etc. — from being able
+# to fetch an arbitrary URL, which would otherwise write internal bytes to a
+# publicly served path (and potentially exfil them). CoverArtArchive stores
+# its full-size images on archive.org and serves them via redirect.
+KNOWN_IMAGE_HOSTS = frozenset(
+    ["coverartarchive.org", "i.discogs.com", "img.discogs.com", "archive.org"]
+)
+IMAGE_REDIRECT_LIMIT = 5
 
 
 class TimeoutException(Exception):
@@ -113,25 +125,61 @@ class Util:
         )
 
     @staticmethod
+    def _is_known_image_host(hostname: Optional[str]) -> bool:
+        """Whether a hostname matches one of the app's known image hosts."""
+        hostname = (hostname or "").lower()
+        return any(
+            hostname == base or hostname.endswith(f".{base}")
+            for base in KNOWN_IMAGE_HOSTS
+        )
+
+    @staticmethod
     def get_image_from_url(url: str, entity_type: Literal["release", "artist", "label"]):
         if entity_type not in VALID_TYPES:
             raise ValueError(
                 f"Invalid entity_type: {entity_type}. "
                 f"Must be one of the following strings: {', '.join(VALID_TYPES)}"
             )
-        response = requests.get(
-            url,
-            headers={
-                "User-Agent": f"databass/{VERSION} (https://github.com/chunned/databass)"
-            },
-            timeout=30,
-        )
+
+        # Fetch with redirects followed one hop at a time so the final URL is
+        # always validated against the known-image-host allowlist. This keeps a
+        # crafted or compromised image URL from pointing the download at an
+        # arbitrary (e.g. internal) address.
+        final_url = url
+        redirects = 0
+        while redirects <= IMAGE_REDIRECT_LIMIT:
+            parsed = urllib.parse.urlparse(final_url)
+            if parsed.scheme != "https" or not Util._is_known_image_host(
+                parsed.hostname
+            ):
+                raise ValueError(
+                    f"Image URL must be https and hosted by a known provider: {final_url}"
+                )
+            response = requests.get(
+                final_url,
+                headers={
+                    "User-Agent": f"databass/{VERSION} "
+                    "(https://github.com/chunned/databass)"
+                },
+                timeout=30,
+                allow_redirects=False,
+            )
+            if response.status_code not in (301, 302, 303, 307, 308):
+                break
+            location = response.headers.get("Location")
+            if not location:
+                raise ValueError("Image URL redirected without a Location header")
+            final_url = urllib.parse.urljoin(final_url, location)
+            redirects += 1
+        else:
+            raise ValueError("Too many redirects while fetching image URL")
+
         if response:
             Path(f"{IMG_BASE_PATH}/{entity_type}").mkdir(parents=True, exist_ok=True)
             # Some image hosts (e.g. CoverArtArchive) serve images at URLs
             # without a file extension, so fall back to sniffing the bytes.
             try:
-                ext = Util.get_image_type_from_url(url)
+                ext = Util.get_image_type_from_url(final_url)
             except ValueError:
                 ext = Util.get_image_type_from_bytes(response.content)
             img_filepath = IMG_BASE_PATH + f"/{entity_type}/" + str(uuid4()) + ext

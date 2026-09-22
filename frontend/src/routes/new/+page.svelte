@@ -27,6 +27,7 @@
 	let artLoading = $state(false);
 	let artSearched = $state(false);
 	let chosenArt = $state<ArtCandidate | null>(null);
+	let artRequest: Promise<void> | null = null;
 
 	let manualMode = $state(false);
 	let manual = $state({
@@ -109,25 +110,31 @@
 		artSearched = false;
 		artCandidates = [];
 		chosenArt = null;
-		try {
-			const res = await apiPost<ArtSearchResponse>('/art', {
-				release_group_mbid: r.release_group_id ?? null,
-				release_mbid: r.release.mbid ?? null,
-				name: r.release.name,
-				artist: r.artist.name
-			});
-			if (selected !== r) return; // user moved on while we were fetching
-			artCandidates = res.candidates;
-			chosenArt = res.candidates[0] ?? null;
-		} catch {
-			if (selected !== r) return;
-			artCandidates = [];
-		} finally {
-			if (selected === r) {
-				artLoading = false;
-				artSearched = true;
+		// Track the in-flight request so save() can wait for the picker to
+		// finish and a fast save doesn't silently discard the user's art
+		// choice (or the auto-pick).
+		artRequest = (async () => {
+			try {
+				const res = await apiPost<ArtSearchResponse>('/art', {
+					release_group_mbid: r.release_group_id ?? null,
+					release_mbid: r.release.mbid ?? null,
+					name: r.release.name,
+					artist: r.artist.name
+				});
+				if (selected !== r) return; // user moved on while we were fetching
+				artCandidates = res.candidates;
+				chosenArt = res.candidates[0] ?? null;
+			} catch {
+				if (selected !== r) return;
+				artCandidates = [];
+			} finally {
+				if (selected === r) {
+					artLoading = false;
+					artSearched = true;
+				}
 			}
-		}
+		})();
+		await artRequest;
 	}
 
 	function artLabel(c: ArtCandidate) {
@@ -154,6 +161,9 @@
 	async function save() {
 		saving = true;
 		try {
+			// If the art picker is still loading, wait for it before posting so a
+			// fast save doesn't discard the chosen art.
+			if (!manualMode) await artRequest;
 			let res: SubmitResponse | undefined;
 			if (manualMode) {
 				res = await apiPost<SubmitResponse>('/submit', {

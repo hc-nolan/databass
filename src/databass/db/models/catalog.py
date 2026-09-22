@@ -657,9 +657,25 @@ class Release(MusicBrainzEntity):
         # submission, since the release itself has already been saved.
         try:
             if image_url is not None:
-                new_image = Util.get_image_from_url(
-                    entity_type="release", url=image_url
-                )
+                try:
+                    new_image = Util.get_image_from_url(
+                        entity_type="release", url=image_url
+                    )
+                except Exception:
+                    # The user's chosen art couldn't be downloaded; fall back to
+                    # the automatic CoverArtArchive/Discogs lookup rather than
+                    # saving the release with no art at all.
+                    print(
+                        f"WARNING: Chosen image download failed for release "
+                        f"{release_id}; falling back to auto-fetch"
+                    )
+                    new_image = image.fetch_image(
+                        entity_type="release",
+                        release_name=data["name"],
+                        artist_name=data["artist_name"],
+                        label_name=data["label_name"],
+                        mbid=data["release_group_mbid"],
+                    )
             else:
                 new_image = image.fetch_image(
                     entity_type="release",

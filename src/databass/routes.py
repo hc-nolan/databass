@@ -523,10 +523,7 @@ def register_routes(app):
     def api_art():
         data = request.get_json() or {}
         if not (
-            data.get("release_group_mbid")
-            or data.get("release_mbid")
-            or data.get("name")
-            or data.get("artist")
+            data.get("release_group_mbid") or data.get("release_mbid") or data.get("name")
         ):
             return jsonify({"error": "Art search requires a release or a name"}), 400
 
