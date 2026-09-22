@@ -186,6 +186,17 @@ export interface SearchResultItem {
 	initials: string;
 }
 
+export interface ArtCandidate {
+	source: 'caa' | 'discogs';
+	url: string;
+	thumb: string;
+	label: string | null;
+}
+
+export interface ArtSearchResponse {
+	candidates: ArtCandidate[];
+}
+
 export interface BrowseMeta {
 	counts: { releases: number; artists: number; labels: number };
 	filters: {

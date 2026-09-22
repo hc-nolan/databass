@@ -399,3 +399,129 @@ class TestGetLabelImageUrl:
             name="Test Label", item_type="label"
         )
         Discogs.request.assert_called_once_with(f"/labels/{label_id}")
+
+
+class TestGetReleaseImages:
+    """Tests for Discogs.get_release_images method"""
+
+    def test_returns_candidates(self, mocker):
+        mock_response = {
+            "images": [
+                {
+                    "uri": "sq.jpg",
+                    "uri150": "sq150.jpg",
+                    "type": "primary",
+                    "height": 300,
+                    "width": 300,
+                },
+                {
+                    "uri": "rect.jpg",
+                    "uri150": "rect150.jpg",
+                    "type": "secondary",
+                    "height": 200,
+                    "width": 400,
+                },
+            ]
+        }
+        mocker.patch.object(Discogs, "get_item_id", return_value="123")
+        mocker.patch.object(Discogs, "request", return_value=mock_response)
+
+        result = Discogs.get_release_images(name="Test Album", artist="Test Artist")
+
+        assert result == [
+            {
+                "source": "discogs",
+                "url": "sq.jpg",
+                "thumb": "sq150.jpg",
+                "label": "primary",
+            },
+            {
+                "source": "discogs",
+                "url": "rect.jpg",
+                "thumb": "rect150.jpg",
+                "label": "secondary",
+            },
+        ]
+
+    def test_uses_short_timeouts(self, mocker):
+        """The picker path bounds its Discogs requests with a short timeout."""
+        mock_get_item_id = mocker.patch.object(
+            Discogs, "get_item_id", return_value="123"
+        )
+        mock_request = mocker.patch.object(
+            Discogs, "request", return_value={"images": []}
+        )
+
+        Discogs.get_release_images(name="Test Album", artist="Test Artist")
+
+        mock_get_item_id.assert_called_once_with(
+            name="Test Album", artist="Test Artist", item_type="release", timeout=10
+        )
+        mock_request.assert_called_once_with("/releases/123", timeout=10)
+
+    def test_square_images_first(self, mocker):
+        mock_response = {
+            "images": [
+                {"uri": "rect.jpg", "height": 100, "width": 200},
+                {"uri": "sq.jpg", "height": 300, "width": 300},
+            ]
+        }
+        mocker.patch.object(Discogs, "get_item_id", return_value="123")
+        mocker.patch.object(Discogs, "request", return_value=mock_response)
+
+        result = Discogs.get_release_images(name="Test Album", artist="Test Artist")
+
+        assert [c["url"] for c in result] == ["sq.jpg", "rect.jpg"]
+
+    def test_skips_images_without_uri_and_falls_back_for_thumb(self, mocker):
+        mock_response = {
+            "images": [
+                {"id": 1},
+                {"uri": "img.jpg", "height": 300, "width": 300},
+            ]
+        }
+        mocker.patch.object(Discogs, "get_item_id", return_value="123")
+        mocker.patch.object(Discogs, "request", return_value=mock_response)
+
+        result = Discogs.get_release_images(name="Test Album", artist="Test Artist")
+
+        assert len(result) == 1
+        assert result[0]["url"] == "img.jpg"
+        assert result[0]["thumb"] == "img.jpg"
+
+    def test_respects_limit(self, mocker):
+        mock_response = {
+            "images": [
+                {"uri": f"{i}.jpg", "height": 300, "width": 300} for i in range(8)
+            ]
+        }
+        mocker.patch.object(Discogs, "get_item_id", return_value="123")
+        mocker.patch.object(Discogs, "request", return_value=mock_response)
+
+        result = Discogs.get_release_images(
+            name="Test Album", artist="Test Artist", limit=3
+        )
+
+        assert len(result) == 3
+
+    def test_no_item_id_returns_empty(self, mocker):
+        mocker.patch.object(Discogs, "get_item_id", return_value=None)
+
+        result = Discogs.get_release_images(name="Test Album", artist="Test Artist")
+
+        assert result == []
+
+    def test_request_exception_returns_empty(self, mocker):
+        mocker.patch.object(Discogs, "get_item_id", return_value="123")
+        mocker.patch.object(
+            Discogs, "request", side_effect=requests.exceptions.RequestException
+        )
+
+        result = Discogs.get_release_images(name="Test Album", artist="Test Artist")
+
+        assert result == []
+
+    @pytest.mark.parametrize("name", [None, "", 123, [], {}])
+    def test_invalid_name(self, name):
+        result = Discogs.get_release_images(name=name, artist="Test Artist")
+        assert result == []

@@ -1085,6 +1085,64 @@ class TestReleaseCreateNew:
         assert result == 1
         mock_get_image.assert_not_called()
 
+    def test_create_new_with_chosen_image_url(self, mocker):
+        """Chosen art arrives as a URL: download it and never persist the raw URL."""
+        mock_insert = mocker.patch("databass.db.models.catalog.insert", return_value=7)
+        mock_update = mocker.patch("databass.db.models.catalog.update")
+        mock_get_image_url = mocker.patch(
+            "databass.api.Util.get_image_from_url",
+            return_value="./static/img/release/art.png",
+        )
+        mock_fetch_image = mocker.patch("databass.api.image.fetch_image")
+
+        test_data = {
+            "name": "Test Release",
+            "artist_name": "Test Artist",
+            "label_name": "Test Label",
+            "release_group_mbid": "rg-1",
+            "image": "https://coverartarchive.org/release/rel-1/front",
+        }
+
+        result = Release.create_new(test_data)
+
+        assert result == 7
+        mock_get_image_url.assert_called_once_with(
+            entity_type="release",
+            url="https://coverartarchive.org/release/rel-1/front",
+        )
+        mock_fetch_image.assert_not_called()
+        inserted_release = mock_insert.call_args[0][0]
+        # the persisted value is the downloaded file path, never the raw URL
+        assert inserted_release.image == "./static/img/release/art.png"
+        mock_update.assert_called_once()
+        assert mock_update.call_args[0][0].image == "./static/img/release/art.png"
+
+    def test_create_new_chosen_image_failure_falls_back_to_auto_fetch(self, mocker):
+        """If the chosen image can't be downloaded, fall back to the auto lookup."""
+        mocker.patch("databass.db.models.catalog.insert", return_value=7)
+        mocker.patch(
+            "databass.api.Util.get_image_from_url", side_effect=Exception("boom")
+        )
+        mock_fetch_image = mocker.patch(
+            "databass.api.image.fetch_image",
+            return_value="./static/img/release/auto.jpg",
+        )
+        mock_update = mocker.patch("databass.db.models.catalog.update")
+
+        test_data = {
+            "name": "Test Release",
+            "artist_name": "Test Artist",
+            "label_name": "Test Label",
+            "release_group_mbid": "rg-1",
+            "image": "https://coverartarchive.org/release/rel-1/front",
+        }
+
+        result = Release.create_new(test_data)
+
+        assert result == 7
+        mock_fetch_image.assert_called_once()
+        assert mock_update.call_args[0][0].image == "./static/img/release/auto.jpg"
+
 
 class TestArtistOrLabelFrequencyHighest:
     """Test suite for ArtistOrLabel.frequency_highest class method"""

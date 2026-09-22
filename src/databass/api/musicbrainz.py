@@ -1,3 +1,4 @@
+import requests
 from os import getenv
 from typing import Optional, Dict, Any
 from dateutil import parser as dateparser
@@ -9,6 +10,9 @@ from .types import ArtistInfo, LabelInfo, ReleaseInfo, EntityInfo, SearchResult
 
 load_dotenv()
 VERSION = getenv("VERSION")
+
+
+CAA_BASE_URL = "https://coverartarchive.org"
 
 
 class MbzParser:
@@ -356,3 +360,89 @@ class MusicBrainz:
 
         imgs = covers.get("images", [])
         return imgs[0].get("id") if imgs else None
+
+    @staticmethod
+    def _fetch_caa_image_list(mbid: str, entity_type: str) -> list[dict]:
+        """
+        Fetch a CoverArtArchive image listing (``release-group`` or
+        ``release``) for the given MBID.
+
+        Uses the CoverArtArchive REST API directly (rather than the
+        musicbrainzngs helpers) so a hard request timeout works from any
+        thread; musicbrainzngs' underling urllib call has no timeout option.
+
+        Returns:
+            list[dict]: The listing's ``images`` entries, or an empty list if
+            the listing can't be fetched.
+        """
+        try:
+            response = requests.get(
+                f"{CAA_BASE_URL}/{entity_type}/{mbid}",
+                headers={
+                    "User-Agent": f"Databass/{VERSION} "
+                    "(https://github.com/hc-nolan/databass)"
+                },
+                timeout=5,
+            )
+            if response.status_code != 200:
+                return []
+            listing = response.json()
+        except Exception:
+            return []
+        if not isinstance(listing, dict):
+            return []
+        return listing.get("images") or []
+
+    @staticmethod
+    def get_image_candidates(
+        release_group_mbid: Optional[str] = None,
+        release_mbid: Optional[str] = None,
+        limit: int = 6,
+    ) -> list[dict]:
+        """
+        List cover-art candidates for a release from CoverArtArchive.
+
+        Each candidate has ``source``, ``url`` (the full-size image), ``thumb``
+        (a 250px thumbnail) and ``label`` (the image's CoverArtArchive types,
+        e.g. "Front"/"Back"). Prefers the release group's listing, falling back
+        to the release's own listing when the group has no art. Front covers
+        are listed first.
+
+        Returns:
+            list[dict]: At most ``limit`` candidates, or an empty list if none
+            can be found.
+        """
+        if not release_group_mbid and not release_mbid:
+            return []
+        if any(
+            m is not None and not isinstance(m, str)
+            for m in (release_group_mbid, release_mbid)
+        ):
+            return []
+
+        images = []
+        if release_group_mbid:
+            images = MusicBrainz._fetch_caa_image_list(
+                release_group_mbid, "release-group"
+            )
+        if not images and release_mbid:
+            images = MusicBrainz._fetch_caa_image_list(release_mbid, "release")
+
+        candidates = []
+        for img in images:
+            url = img.get("image")
+            if not url:
+                continue
+            types = img.get("types")
+            candidate_types = types if isinstance(types, list) else None
+            candidates.append(
+                {
+                    "source": "caa",
+                    "url": url,
+                    "thumb": (img.get("thumbnails") or {}).get("large") or url,
+                    "label": candidate_types[0] if candidate_types else None,
+                }
+            )
+        # Front covers first, then the rest
+        candidates.sort(key=lambda c: 0 if c["label"] == "Front" else 1)
+        return candidates[:limit]
