@@ -462,6 +462,77 @@ class TestBucketAndPlaceholder:
             assert labels == {"Real Label": 3}
 
 
+def _seed_country_junk():
+    """Artists (and matching releases) with junk or legit country values."""
+    label = Label(name="Country Label", country="CA")
+    genre = Genre(name="Rock")
+    artists = [
+        Artist(name="Legit Artist", country="CA"),
+        Artist(name="Question Artist", country="?"),
+        Artist(name="Dash Artist", country="—"),
+        Artist(name="XW Artist", country="XW"),
+        Artist(name="None Artist", country="None"),
+    ]
+    app_db.session.add(label)
+    app_db.session.add(genre)
+    app_db.session.add_all(artists)
+    app_db.session.flush()
+    for artist in artists:
+        app_db.session.add(
+            Release(
+                name=f"R-{artist.name}",
+                artist_id=artist.id,
+                label_id=label.id,
+                year=2000,
+                runtime=45 * 60000,
+                rating=70,
+                listen_date=datetime(2022, 1, 1),
+                track_count=10,
+                main_genre_id=genre.id,
+                country=artist.country,
+            )
+        )
+    app_db.session.commit()
+
+
+class TestCountryCleanup:
+    """Nonexistent country values ('?', '—', 'XW', 'None') don't leak onto the page."""
+
+    def test_junk_countries_excluded_from_options(self, app):
+        with app.app_context():
+            _seed_country_junk()
+            data = explore_options()
+            assert [c for c, _ in data["options"]["artist_countries"]] == ["CA"]
+            assert [c for c, _ in data["options"]["release_countries"]] == ["CA"]
+            assert [c for c, _ in data["options"]["label_countries"]] == ["CA"]
+
+    def test_junk_artist_countries_excluded_from_grouping(self, app):
+        with app.app_context():
+            _seed_country_junk()
+            res = run_query({"group_by": "artist_country", "metric": "count"})
+            rows = {r["label"]: r["value"] for r in res["rows"]}
+            assert rows == {"Canada": 1}
+
+    def test_junk_release_countries_excluded_from_grouping(self, app):
+        with app.app_context():
+            _seed_country_junk()
+            res = run_query({"group_by": "release_country", "metric": "count"})
+            rows = {r["label"]: r["value"] for r in res["rows"]}
+            assert rows == {"Canada": 1}
+
+    def test_legit_country_filter_still_matches(self, app):
+        with app.app_context():
+            _seed_country_junk()
+            res = run_query(
+                {
+                    "group_by": "artist",
+                    "metric": "count",
+                    "filters": [{"field": "artist_country", "op": "eq", "value": "CA"}],
+                }
+            )
+            assert {r["label"] for r in res["rows"]} == {"Legit Artist"}
+
+
 class TestApiExplore:
     def test_options_payload(self, client):
         res = client.get("/api/explore/options")
