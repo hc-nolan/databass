@@ -132,3 +132,44 @@ def fetch_image(
             img_type=img_type,
         )
     return None
+
+
+def get_art_candidates(
+    release_group_mbid: Optional[str] = None,
+    release_mbid: Optional[str] = None,
+    release_name: Optional[str] = None,
+    artist_name: Optional[str] = None,
+    limit: int = 10,
+) -> list[dict]:
+    """
+    Gather album-art candidates from both CoverArtArchive and Discogs so the
+    user can pick which one to use for a release.
+
+    CoverArtArchive is queried when a release/release-group MBID is provided;
+    Discogs is queried when a release name (and ideally artist) is provided.
+    Each candidate has keys ``source``, ``url``, ``thumb`` and ``label``. A
+    failure in one source never prevents the other from contributing.
+
+    Returns:
+        list[dict]: At most ``limit`` candidates, or an empty list if neither
+        source yields any.
+    """
+    candidates = []
+    if release_group_mbid or release_mbid:
+        try:
+            candidates.extend(
+                MusicBrainz.get_image_candidates(
+                    release_group_mbid=release_group_mbid,
+                    release_mbid=release_mbid,
+                )
+            )
+        except Exception as err:
+            print(f"WARNING: CoverArtArchive candidate search failed: {err}")
+    if release_name:
+        try:
+            candidates.extend(
+                Discogs.get_release_images(name=release_name, artist=artist_name)
+            )
+        except Exception as err:
+            print(f"WARNING: Discogs candidate search failed: {err}")
+    return candidates[:limit]

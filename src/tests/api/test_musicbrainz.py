@@ -665,3 +665,211 @@ class TestGetImage:
 
         result = MusicBrainz.get_image("valid-mbid")
         assert result is None
+
+
+class TestGetImageCandidates:
+    """Tests for MusicBrainz.get_image_candidates"""
+
+    @staticmethod
+    def _caa_response(mocker, payload, status=200):
+        mock_response = mocker.Mock()
+        mock_response.status_code = status
+        mock_response.json.return_value = payload
+        return mock_response
+
+    def test_uses_release_group_listing(self, mocker):
+        listing = {
+            "images": [
+                {
+                    "id": "front-1",
+                    "image": "http://coverartarchive.org/release/rel-1/front-1",
+                    "thumbnails": {
+                        "large": "http://coverartarchive.org/release/rel-1/front-1-250"
+                    },
+                    "types": ["Front"],
+                },
+                {
+                    "id": "back-1",
+                    "image": "http://coverartarchive.org/release/rel-1/back-1",
+                    "thumbnails": {
+                        "large": "http://coverartarchive.org/release/rel-1/back-1-250"
+                    },
+                    "types": ["Back"],
+                },
+            ]
+        }
+        mock_get = mocker.patch(
+            "databass.api.musicbrainz.requests.get",
+            return_value=self._caa_response(mocker, listing),
+        )
+
+        result = MusicBrainz.get_image_candidates(release_group_mbid="rg-1")
+
+        mock_get.assert_called_once_with(
+            "https://coverartarchive.org/release-group/rg-1",
+            headers=mocker.ANY,
+            timeout=5,
+        )
+        assert len(result) == 2
+        assert result[0] == {
+            "source": "caa",
+            "url": "http://coverartarchive.org/release/rel-1/front-1",
+            "thumb": "http://coverartarchive.org/release/rel-1/front-1-250",
+            "label": "Front",
+        }
+
+    def test_front_covers_first(self, mocker):
+        """Front covers are listed before other image types regardless of API order."""
+        listing = {
+            "images": [
+                {"id": "b", "image": "http://img/back", "types": ["Back"]},
+                {"id": "f", "image": "http://img/front", "types": ["Front"]},
+            ]
+        }
+        mocker.patch(
+            "databass.api.musicbrainz.requests.get",
+            return_value=self._caa_response(mocker, listing),
+        )
+
+        result = MusicBrainz.get_image_candidates(release_group_mbid="rg-1")
+
+        assert [c["label"] for c in result] == ["Front", "Back"]
+
+    def test_falls_back_to_release_listing(self, mocker):
+        """An empty release-group listing falls back to the release's own listing."""
+
+        def fake_get(url, **kwargs):
+            if "release-group" in url:
+                return self._caa_response(mocker, {"images": []})
+            if "release/" in url:
+                return self._caa_response(
+                    mocker, {"images": [{"id": "c1", "image": "http://img/rel"}]}
+                )
+            return self._caa_response(mocker, {"images": []})
+
+        mock_get = mocker.patch(
+            "databass.api.musicbrainz.requests.get", side_effect=fake_get
+        )
+
+        result = MusicBrainz.get_image_candidates(
+            release_group_mbid="rg-1", release_mbid="rel-1"
+        )
+
+        urls = [call.args[0] for call in mock_get.call_args_list]
+        assert urls == [
+            "https://coverartarchive.org/release-group/rg-1",
+            "https://coverartarchive.org/release/rel-1",
+        ]
+        assert result[0]["url"] == "http://img/rel"
+
+    def test_respects_limit(self, mocker):
+        listing = {
+            "images": [
+                {"id": f"c{i}", "image": f"http://img/{i}", "types": ["Front"]}
+                for i in range(10)
+            ]
+        }
+        mocker.patch(
+            "databass.api.musicbrainz.requests.get",
+            return_value=self._caa_response(mocker, listing),
+        )
+
+        result = MusicBrainz.get_image_candidates(release_group_mbid="rg-1", limit=3)
+
+        assert len(result) == 3
+
+    def test_skips_entries_without_url(self, mocker):
+        listing = {
+            "images": [
+                {"id": "no-url"},
+                {"id": "c1", "image": "http://img/1", "types": ["Front"]},
+            ]
+        }
+        mocker.patch(
+            "databass.api.musicbrainz.requests.get",
+            return_value=self._caa_response(mocker, listing),
+        )
+
+        result = MusicBrainz.get_image_candidates(release_group_mbid="rg-1")
+
+        assert [c["url"] for c in result] == ["http://img/1"]
+
+    def test_missing_thumbnail_uses_full_url(self, mocker):
+        listing = {"images": [{"id": "c1", "image": "http://img/1", "types": ["Front"]}]}
+        mocker.patch(
+            "databass.api.musicbrainz.requests.get",
+            return_value=self._caa_response(mocker, listing),
+        )
+
+        result = MusicBrainz.get_image_candidates(release_group_mbid="rg-1")
+
+        assert result[0]["thumb"] == "http://img/1"
+
+    def test_missing_types_uses_none_label(self, mocker):
+        listing = {"images": [{"id": "c1", "image": "http://img/1"}]}
+        mocker.patch(
+            "databass.api.musicbrainz.requests.get",
+            return_value=self._caa_response(mocker, listing),
+        )
+
+        result = MusicBrainz.get_image_candidates(release_group_mbid="rg-1")
+
+        assert result[0]["label"] is None
+
+    def test_string_types_uses_none_label(self, mocker):
+        """A non-list ``types`` value shouldn't be treated as a string of chars."""
+        listing = {"images": [{"id": "c1", "image": "http://img/1", "types": "Front"}]}
+        mocker.patch(
+            "databass.api.musicbrainz.requests.get",
+            return_value=self._caa_response(mocker, listing),
+        )
+
+        result = MusicBrainz.get_image_candidates(release_group_mbid="rg-1")
+
+        assert result[0]["label"] is None
+
+    @pytest.mark.parametrize(
+        "kwargs",
+        [
+            {},
+            {"release_group_mbid": None},
+            {"release_mbid": None},
+            {"release_group_mbid": ""},
+        ],
+    )
+    def test_missing_or_empty_mbids(self, kwargs):
+        assert MusicBrainz.get_image_candidates(**kwargs) == []
+
+    @pytest.mark.parametrize("bad_mbid", [123, [], {}])
+    def test_non_string_mbid(self, bad_mbid):
+        assert MusicBrainz.get_image_candidates(release_group_mbid=bad_mbid) == []
+
+    def test_listing_error_returns_empty(self, mocker):
+        mocker.patch(
+            "databass.api.musicbrainz.requests.get",
+            side_effect=Exception("API Error"),
+        )
+
+        result = MusicBrainz.get_image_candidates(release_group_mbid="rg-1")
+
+        assert result == []
+
+    def test_non_200_listing_returns_empty(self, mocker):
+        mocker.patch(
+            "databass.api.musicbrainz.requests.get",
+            return_value=self._caa_response(mocker, {"error": "not found"}, status=404),
+        )
+
+        result = MusicBrainz.get_image_candidates(release_group_mbid="rg-1")
+
+        assert result == []
+
+    def test_non_dict_listing_returns_empty(self, mocker):
+        mocker.patch(
+            "databass.api.musicbrainz.requests.get",
+            return_value=self._caa_response(mocker, ["not", "a", "dict"]),
+        )
+
+        result = MusicBrainz.get_image_candidates(release_group_mbid="rg-1")
+
+        assert result == []

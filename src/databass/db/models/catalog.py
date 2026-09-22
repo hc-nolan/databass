@@ -645,16 +645,37 @@ class Release(MusicBrainzEntity):
             raise ValueError("data argument must be a dictionary")
         from ...api import Util, image
 
+        # If the user picked specific art during the search flow, the chosen
+        # image arrives as a URL; keep it out of the DB row so a raw URL is
+        # never persisted, and download it (and write the file path) below.
+        image_url = data.pop("image", None)
+
         new_release = Release(**data)
         release_id = insert(new_release)
 
         # A failure to fetch the cover image shouldn't fail the whole
         # submission, since the release itself has already been saved.
         try:
-            if data["image"] is not None:
-                new_image = Util.get_image_from_url(
-                    entity_type="release", url=data["image"]
-                )
+            if image_url is not None:
+                try:
+                    new_image = Util.get_image_from_url(
+                        entity_type="release", url=image_url
+                    )
+                except Exception:
+                    # The user's chosen art couldn't be downloaded; fall back to
+                    # the automatic CoverArtArchive/Discogs lookup rather than
+                    # saving the release with no art at all.
+                    print(
+                        f"WARNING: Chosen image download failed for release "
+                        f"{release_id}; falling back to auto-fetch"
+                    )
+                    new_image = image.fetch_image(
+                        entity_type="release",
+                        release_name=data["name"],
+                        artist_name=data["artist_name"],
+                        label_name=data["label_name"],
+                        mbid=data["release_group_mbid"],
+                    )
             else:
                 new_image = image.fetch_image(
                     entity_type="release",
