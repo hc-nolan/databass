@@ -358,6 +358,8 @@ class TestRunQuery:
         res = run_query({"group_by": "artist", "metric": "runtime_hours"})
         by_label = {r["label"]: r for r in res["rows"]}
         assert by_label["Arcade Fire"]["value"] == 2.2  # 3 x 45min = 2.25h, round-half-even
+        # 3 x 45min = 2.25h -> "2h 15m", not the old "2m"
+        assert by_label["Arcade Fire"]["display"] == "2h 15m"
 
 
 class TestRunQueryBayes:
@@ -398,6 +400,66 @@ class TestHardening:
         res = run_query({"group_by": "artist", "metric": "count", "limit": 2})
         assert len(res["rows"]) == 2
         assert res["meta"]["total_groups"] == 4  # all four seeded artists
+
+
+def _seed_tiny_library():
+    """A two-release library used for bucket/placeholder edge cases."""
+    artist = Artist(name="Real Artist", country="US")
+    label = Label(name="Real Label", country="US")
+    genre = Genre(name="Rock")
+    app_db.session.add_all([artist, label, genre])
+    app_db.session.flush()
+
+    def rel(name, artist_id, label_id, rating):
+        app_db.session.add(
+            Release(
+                name=name,
+                artist_id=artist_id,
+                label_id=label_id,
+                year=2000,
+                runtime=45 * 60000,
+                rating=rating,
+                listen_date=datetime(2022, 1, 1),
+                track_count=10,
+                main_genre_id=genre.id,
+            )
+        )
+
+    rel("Perfect", artist.id, label.id, 100)
+    rel("High", artist.id, label.id, 95)
+    rel("Mid", artist.id, label.id, 60)
+    # Unknown is the id-0 placeholder entity created by ensure_db_placeholders.
+    rel("Mystery", 0, 0, 70)
+    app_db.session.commit()
+
+
+class TestBucketAndPlaceholder:
+    def test_rating_100_bucket_capped_at_10(self, app):
+        with app.app_context():
+            _seed_tiny_library()
+            res = run_query({"group_by": "rating_bucket", "metric": "count"})
+            rows = {r["label"]: r["value"] for r in res["rows"]}
+            assert "11" not in rows
+            assert rows.get("10") == 2  # ratings 95 and 100
+            assert rows.get("7") == 1  # rating 60
+
+    def test_unknown_placeholder_excluded_from_grouping(self, app):
+        with app.app_context():
+            _seed_tiny_library()
+            res = run_query({"group_by": "artist", "metric": "count"})
+            labels = {r["label"]: r["value"] for r in res["rows"]}
+            assert "Unknown" not in labels
+            # The placeholder release is filtered from grouping, but the real
+            # artist still owns three releases (100, 95, 60 ratings).
+            assert labels == {"Real Artist": 3}
+
+    def test_unknown_placeholder_excluded_from_label_grouping(self, app):
+        with app.app_context():
+            _seed_tiny_library()
+            res = run_query({"group_by": "label", "metric": "count"})
+            labels = {r["label"]: r["value"] for r in res["rows"]}
+            assert "Unknown" not in labels
+            assert labels == {"Real Label": 3}
 
 
 class TestApiExplore:

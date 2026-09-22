@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Any, Callable, Optional
 
 import pycountry
-from sqlalchemy import Integer, and_, extract, false, func, or_
+from sqlalchemy import Integer, and_, case, extract, false, func, or_
 
 from .db import models
 from .db.base import app_db
@@ -130,7 +130,7 @@ MAX_FILTERS = 20
 _ARTIST_FIELDS = {"artist_name", "artist_country", "artist_type", "artist_active"}
 _LABEL_FIELDS = {"label_name", "label_country", "label_type"}
 
-_PLACEHOLDER_NAMES = ["", "[NONE]", "Various Artists", "[no label]"]
+_PLACEHOLDER_NAMES = ["", "[NONE]", "Various Artists", "[no label]", "Unknown"]
 
 
 class ExploreError(ValueError):
@@ -287,7 +287,9 @@ def _dimension(group_by: str) -> dict:
     year_expr = extract("year", Release.listen_date).cast(Integer)
     month_expr = extract("month", Release.listen_date).cast(Integer)
     decade_expr = func.floor(Release.year / 10.0) * 10
-    bucket_expr = func.floor(Release.rating / 10.0) + 1
+    # Ratings are 0-100 (0-10 display); a perfect 100 must land in bucket 10,
+    # not floor(10.0)+1 = 11. CASE is portable across Postgres and SQLite.
+    bucket_expr = case((Release.rating >= 100, 9), else_=func.floor(Release.rating / 10.0)) + 1
 
     no_country = lambda v: country_name(v) or "—"
     identity = lambda v: v
@@ -565,8 +567,9 @@ def _period_count(filters: list[dict]) -> int:
 
 
 def _fmt_hours(hours: float) -> str:
-    hours = round(hours)
-    h, m = divmod(hours, 60)
+    """Format a duration (in hours) as e.g. '1h 30m' or '45m'."""
+    minutes = round(float(hours) * 60)
+    h, m = divmod(minutes, 60)
     if h and m:
         return f"{h}h {m}m"
     if h:

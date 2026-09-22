@@ -161,12 +161,12 @@
 
 	// --- run + URL sync ---
 
-	async function run() {
+	async function run(spec: ExploreSpec) {
 		const seq = ++runSeq;
 		loading = true;
 		error = null;
 		try {
-			const res = await apiPost<ExploreResponse>('/explore', buildSpec());
+			const res = await apiPost<ExploreResponse>('/explore', spec);
 			if (seq !== runSeq) return; // stale response — a newer run is in flight
 			result = res;
 		} catch (e) {
@@ -177,8 +177,8 @@
 		}
 	}
 
-	function syncUrl() {
-		const q = encodeSpec(buildSpec());
+	function syncUrl(spec: ExploreSpec) {
+		const q = encodeSpec(spec);
 		const target = resolve(`/stats/explore?q=${q}` as '/stats/explore');
 		if (page.url.pathname + page.url.search !== target) {
 			goto(target, {
@@ -191,16 +191,14 @@
 	}
 
 	$effect(() => {
-		void rows;
-		void groupBy;
-		void metric;
-		void minItems;
-		void order;
-		void limit;
 		if (!options) return;
+		// buildSpec reads every filter-row property and each control, so deep
+		// mutations (typing in a row input, adding/removing rows, changing a
+		// select) all retrigger this effect and re-run the query.
+		const spec = buildSpec();
 		const timer = setTimeout(() => {
-			syncUrl();
-			run();
+			syncUrl(spec);
+			run(spec);
 		}, 250);
 		return () => clearTimeout(timer);
 	});
