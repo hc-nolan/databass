@@ -148,6 +148,23 @@ def country_name(code: Optional[str]) -> Optional[str]:
         return code
 
 
+# Real ISO 3166-1 alpha-2 codes. Used to filter non-existent country values —
+# e.g. '?', '—', 'None', or MusicBrainz's "worldwide" pseudo-code 'XW' — out
+# of the explore page's country filters and grouped results.
+_REAL_COUNTRY_CODES = frozenset(
+    c.alpha_2.upper() for c in pycountry.countries if getattr(c, "alpha_2", None)
+)
+
+
+def _valid_country_values(model) -> list[str]:
+    """Distinct stored country values that resolve to real ISO codes."""
+    return sorted(
+        c
+        for c in model.get_distinct_column_values("country")
+        if c and c.upper() in _REAL_COUNTRY_CODES
+    )
+
+
 # ---------------------------------------------------------------------------
 # Validation
 # ---------------------------------------------------------------------------
@@ -337,6 +354,7 @@ def _dimension(group_by: str) -> dict:
             "format": no_country,
             "href": None,
             "placeholder_exclude": False,
+            "country_model": Release,
         }
     if group_by == "artist_country":
         return {
@@ -348,6 +366,7 @@ def _dimension(group_by: str) -> dict:
             "format": no_country,
             "href": None,
             "placeholder_exclude": False,
+            "country_model": Artist,
         }
     if group_by == "artist_type":
         return {
@@ -540,6 +559,15 @@ def _apply_dim_joins_and_filters(query, dim, filters: list[dict]):
         query = query.join(Genre, Genre.id == Release.main_genre_id)
     for filter_ in filters:
         query = _apply_filter(query, filter_)
+    country_model = dim.get("country_model")
+    if country_model is not None:
+        # Drop non-existent country values ('?', '—', 'XW', 'None', …) so they
+        # never appear as group labels on the explore page.
+        codes = {c.upper() for c in _valid_country_values(country_model)}
+        if codes:
+            query = query.filter(func.upper(country_model.country).in_(list(codes)))
+        else:
+            query = query.filter(false())
     if dim.get("placeholder_exclude"):
         model = Artist if dim["table"] == "artist" else Label
         query = query.filter(model.name.notin_(_PLACEHOLDER_NAMES))
@@ -784,7 +812,7 @@ def explore_options() -> dict:
     Genre = models.Genre
 
     def country_pairs(model) -> list[list[str]]:
-        codes = sorted(c for c in model.get_distinct_column_values("country") if c)
+        codes = _valid_country_values(model)
         return [[c, country_name(c)] for c in codes]
 
     release_years = (
