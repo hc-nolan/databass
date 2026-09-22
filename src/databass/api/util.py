@@ -106,8 +106,10 @@ class Util:
             return ".jpg"
         if bytestr.startswith(PNG_HEADER):
             return ".png"
+        if bytestr.startswith(b"RIFF") and bytestr[8:12] == b"WEBP":
+            return ".webp"
         raise ValueError(
-            f"Unsupported file type (signature: {bytestr[:8].hex()}). Supported types: jpg, png"
+            f"Unsupported file type (signature: {bytestr[:8].hex()}). Supported types: jpg, png, webp"
         )
 
     @staticmethod
@@ -126,7 +128,12 @@ class Util:
         )
         if response:
             Path(f"{IMG_BASE_PATH}/{entity_type}").mkdir(parents=True, exist_ok=True)
-            ext = Util.get_image_type_from_url(url)
+            # Some image hosts (e.g. CoverArtArchive) serve images at URLs
+            # without a file extension, so fall back to sniffing the bytes.
+            try:
+                ext = Util.get_image_type_from_url(url)
+            except ValueError:
+                ext = Util.get_image_type_from_bytes(response.content)
             img_filepath = IMG_BASE_PATH + f"/{entity_type}/" + str(uuid4()) + ext
             with open(img_filepath, "wb") as img_file:
                 img_file.write(response.content)

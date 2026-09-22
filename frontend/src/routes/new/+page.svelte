@@ -3,10 +3,17 @@
 	import { goto } from '$app/navigation';
 	import { page as pageState } from '$app/state';
 	import { apiGet, apiPost } from '$lib/api';
-	import type { NewListenData, SearchResultItem, SubmitResponse } from '$lib/types';
+	import type {
+		ArtCandidate,
+		ArtSearchResponse,
+		NewListenData,
+		SearchResultItem,
+		SubmitResponse
+	} from '$lib/types';
 	import { headerState } from '$lib/chrome.svelte';
 	import { goalNoticeState } from '$lib/goalNotice.svelte';
 	import { ratingHint } from '$lib/format';
+	import ArtPlaceholder from '$lib/components/ArtPlaceholder.svelte';
 
 	let data = $state<NewListenData | null>(null);
 	let qRelease = $state(pageState.url.searchParams.get('q') ?? '');
@@ -16,6 +23,10 @@
 	let searched = $state(false);
 	let searching = $state(false);
 	let selectedIndex = $state<number | null>(null);
+	let artCandidates = $state<ArtCandidate[]>([]);
+	let artLoading = $state(false);
+	let artSearched = $state(false);
+	let chosenArt = $state<ArtCandidate | null>(null);
 
 	let manualMode = $state(false);
 	let manual = $state({
@@ -38,6 +49,20 @@
 
 	const selected = $derived(selectedIndex != null ? results[selectedIndex] : null);
 	const hasSelection = $derived(manualMode ? manual.name.trim().length > 0 : selected != null);
+
+	const artGroups = $derived.by(() => {
+		const labels: Record<string, string> = {
+			caa: 'COVER ART ARCHIVE',
+			discogs: 'DISCOGS'
+		};
+		return ['caa', 'discogs']
+			.map((source) => ({
+				source,
+				label: labels[source] ?? source.toUpperCase(),
+				items: artCandidates.filter((c) => c.source === source)
+			}))
+			.filter((group) => group.items.length > 0);
+	});
 
 	onMount(async () => {
 		data = await apiGet<NewListenData>('/new');
@@ -62,6 +87,10 @@
 			searched = true;
 			selectedIndex = null;
 			saved = false;
+			artCandidates = [];
+			artLoading = false;
+			artSearched = false;
+			chosenArt = null;
 		} finally {
 			searching = false;
 		}
@@ -70,6 +99,39 @@
 	function selectResult(i: number) {
 		selectedIndex = i;
 		saved = false;
+		loadArt();
+	}
+
+	async function loadArt() {
+		const r = selected;
+		if (!r) return;
+		artLoading = true;
+		artSearched = false;
+		artCandidates = [];
+		chosenArt = null;
+		try {
+			const res = await apiPost<ArtSearchResponse>('/art', {
+				release_group_mbid: r.release_group_id ?? null,
+				release_mbid: r.release.mbid ?? null,
+				name: r.release.name,
+				artist: r.artist.name
+			});
+			if (selected !== r) return; // user moved on while we were fetching
+			artCandidates = res.candidates;
+			chosenArt = res.candidates[0] ?? null;
+		} catch {
+			if (selected !== r) return;
+			artCandidates = [];
+		} finally {
+			if (selected === r) {
+				artLoading = false;
+				artSearched = true;
+			}
+		}
+	}
+
+	function artLabel(c: ArtCandidate) {
+		return c.label ? `${c.label} art from ${c.source}` : `art from ${c.source}`;
 	}
 
 	function toggleGenre(name: string) {
@@ -125,6 +187,7 @@
 					track_count: selected.track_count,
 					listen_date: listenDate,
 					country: selected.country,
+					image: chosenArt?.url ?? null,
 					note: note || null
 				});
 			}
@@ -294,7 +357,12 @@
 			<div class="flex flex-col gap-4.5">
 				{#if !manualMode && selected}
 					<div class="flex items-center gap-3.5">
-						<div class="cover h-16 w-16 shrink-0 rounded"></div>
+						<ArtPlaceholder
+							artKey={selected.artist.name}
+							src={chosenArt?.thumb}
+							hasArt={!!chosenArt}
+							size="64px"
+						/>
 						<div class="flex min-w-0 flex-col gap-0.5">
 							<span class="text-lg font-semibold">{selected.release.name}</span>
 							<span class="text-sm text-muted-2">{selected.artist.name}</span>
@@ -302,6 +370,48 @@
 								>{selected.label.name} · {selected.date ?? ''} · {selected.format ?? ''}</span
 							>
 						</div>
+					</div>
+				{/if}
+
+				{#if !manualMode && selected && (artLoading || artSearched)}
+					<div class="flex flex-col gap-2">
+						<div class="flex flex-wrap items-center gap-2">
+							<span class="text-xs text-muted tracking-wider">ALBUM ART</span>
+							{#if artLoading}
+								<span class="text-xs text-muted-2 animate-pulse"
+									>searching CoverArtArchive + Discogs…</span
+								>
+							{:else if artCandidates.length === 0}
+								<span class="text-xs text-muted-2">none found — art will be fetched on save</span>
+							{/if}
+						</div>
+						{#if artLoading}
+							<div class="flex gap-1.5">
+								{#each [0, 1, 2, 3] as i (i)}
+									<div class="bg-field h-13 w-13 animate-pulse rounded-xs"></div>
+								{/each}
+							</div>
+						{:else if artCandidates.length > 0}
+							<div class="flex flex-col gap-1.5">
+								{#each artGroups as group (group.source)}
+									<div class="flex flex-wrap items-center gap-1.5">
+										<span class="text-2xs text-muted-2 font-bold tracking-wider">{group.label}</span>
+										{#each group.items as c (c.url)}
+											<button
+												class="bg-field h-13 w-13 shrink-0 cursor-pointer overflow-hidden rounded-xs border {chosenArt?.url ===
+												c.url
+													? 'border-amber'
+													: 'border-border-strong hover:border-border-hover'}"
+												aria-label={artLabel(c)}
+												onclick={() => (chosenArt = c)}
+											>
+												<img src={c.thumb} alt="" class="h-full w-full object-cover" />
+											</button>
+										{/each}
+									</div>
+								{/each}
+							</div>
+						{/if}
 					</div>
 				{/if}
 

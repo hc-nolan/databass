@@ -645,15 +645,20 @@ class Release(MusicBrainzEntity):
             raise ValueError("data argument must be a dictionary")
         from ...api import Util, image
 
+        # If the user picked specific art during the search flow, the chosen
+        # image arrives as a URL; keep it out of the DB row so a raw URL is
+        # never persisted, and download it (and write the file path) below.
+        image_url = data.pop("image", None)
+
         new_release = Release(**data)
         release_id = insert(new_release)
 
         # A failure to fetch the cover image shouldn't fail the whole
         # submission, since the release itself has already been saved.
         try:
-            if data["image"] is not None:
+            if image_url is not None:
                 new_image = Util.get_image_from_url(
-                    entity_type="release", url=data["image"]
+                    entity_type="release", url=image_url
                 )
             else:
                 new_image = image.fetch_image(

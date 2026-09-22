@@ -20,7 +20,7 @@ from flask import (
 )
 from sqlalchemy.exc import IntegrityError
 import pycountry
-from .api import Util, MusicBrainz
+from .api import Util, MusicBrainz, image
 from . import db
 from .db import models
 from .db.util import handle_submit_data
@@ -182,7 +182,7 @@ def get_release_data(data) -> dict:
         "listen_date": Util.to_date(None, data.get("listen_date") or Util.today()),
         "country": data.get("country"),
         "genres": data.get("genres"),
-        "image": None,
+        "image": data.get("image"),
         "note": data.get("note") or None,
     }
 
@@ -518,6 +518,25 @@ def register_routes(app):
             return jsonify({"error": "Search requires at least one search term"}), 400
 
         return jsonify({"results": results})
+
+    @app.route("/api/art", methods=["POST"])
+    def api_art():
+        data = request.get_json() or {}
+        if not (
+            data.get("release_group_mbid")
+            or data.get("release_mbid")
+            or data.get("name")
+            or data.get("artist")
+        ):
+            return jsonify({"error": "Art search requires a release or a name"}), 400
+
+        candidates = image.get_art_candidates(
+            release_group_mbid=data.get("release_group_mbid"),
+            release_mbid=data.get("release_mbid"),
+            release_name=data.get("name"),
+            artist_name=data.get("artist"),
+        )
+        return jsonify({"candidates": candidates})
 
     @app.route("/api/submit", methods=["POST"])
     def api_submit():

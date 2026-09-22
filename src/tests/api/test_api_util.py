@@ -156,3 +156,61 @@ class TestGetImageTypeFromBytes:
         with pytest.raises(ValueError) as exc_info:
             Util.get_image_type_from_bytes(partial_jpeg)
         assert "must be at least 8 bytes" in str(exc_info.value)
+
+    def test_get_image_type_from_bytes_webp(self):
+        """Test to verify WebP bytes are correctly identified"""
+        webp_bytes = b"RIFF" + b"\x00" * 4 + b"WEBP" + b"\x00" * 4
+        assert Util.get_image_type_from_bytes(webp_bytes) == ".webp"
+
+
+class TestGetImageFromUrl:
+    """Tests for Util.get_image_from_url method"""
+
+    @staticmethod
+    def _patch_open(mocker):
+        # Replace builtins.open so no real file is written to disk during tests.
+        mocker.patch("builtins.open", return_value=mocker.MagicMock())
+
+    def test_url_with_extension_uses_url_detection(self, mocker):
+        """URLs already carrying a supported extension keep using URL detection."""
+        mock_response = mocker.Mock()
+        mock_response.content = VALID_JPEG_BYTES
+        mocker.patch("databass.api.util.requests.get", return_value=mock_response)
+        mocker.patch("databass.api.util.Path.mkdir")
+        self._patch_open(mocker)
+
+        result = Util.get_image_from_url("https://example.com/image.jpeg", "release")
+
+        assert result.startswith("./static/img/release/")
+        assert result.endswith(".jpeg")
+
+    def test_extensionless_url_falls_back_to_bytes(self, mocker):
+        """
+        Extension-less URLs (e.g. CoverArtArchive) fall back to sniffing the
+        downloaded bytes for the file type.
+        """
+        mock_response = mocker.Mock()
+        mock_response.content = VALID_PNG_BYTES
+        mocker.patch("databass.api.util.requests.get", return_value=mock_response)
+        mocker.patch("databass.api.util.Path.mkdir")
+        self._patch_open(mocker)
+
+        result = Util.get_image_from_url(
+            "https://coverartarchive.org/release-group/abc/front", "release"
+        )
+
+        assert result.startswith("./static/img/release/")
+        assert result.endswith(".png")
+
+    def test_unrecognizable_bytes_raise(self, mocker):
+        """Bytes that match neither a URL extension nor a known signature raise."""
+        mock_response = mocker.Mock()
+        mock_response.content = INVALID_BYTES
+        mocker.patch("databass.api.util.requests.get", return_value=mock_response)
+        mocker.patch("databass.api.util.Path.mkdir")
+        self._patch_open(mocker)
+
+        with pytest.raises(ValueError, match="Unsupported file type"):
+            Util.get_image_from_url(
+                "https://coverartarchive.org/release-group/abc/front", "release"
+            )

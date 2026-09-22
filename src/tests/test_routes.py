@@ -90,6 +90,95 @@ class TestSearch:
         assert response.status_code == 415
 
 
+class TestArt:
+    # Tests for /api/art
+    def test_art_search_success(self, client, mocker):
+        mock_candidates = [
+            {
+                "source": "caa",
+                "url": "http://coverartarchive.org/release/a/front",
+                "thumb": "http://coverartarchive.org/release/a/front-250",
+                "label": "Front",
+            }
+        ]
+        mock_call = mocker.patch(
+            "databass.routes.image.get_art_candidates", return_value=mock_candidates
+        )
+
+        response = client.post(
+            "/api/art",
+            json={
+                "release_group_mbid": "rg-1",
+                "release_mbid": "rel-1",
+                "name": "Test Album",
+                "artist": "Test Artist",
+            },
+        )
+
+        assert response.status_code == 200
+        assert response.json["candidates"] == mock_candidates
+        mock_call.assert_called_once_with(
+            release_group_mbid="rg-1",
+            release_mbid="rel-1",
+            release_name="Test Album",
+            artist_name="Test Artist",
+        )
+
+    def test_art_search_no_candidates(self, client, mocker):
+        mocker.patch("databass.routes.image.get_art_candidates", return_value=[])
+
+        response = client.post(
+            "/api/art",
+            json={"name": "Test Album", "artist": "Test Artist"},
+        )
+
+        assert response.status_code == 200
+        assert response.json["candidates"] == []
+
+    def test_art_search_missing_data_returns_400(self, client):
+        response = client.post("/api/art", json={})
+
+        assert response.status_code == 400
+        assert "error" in response.json
+
+    def test_art_search_non_json(self, client):
+        response = client.post("/api/art")
+
+        assert response.status_code == 415
+
+
+class TestGetReleaseData:
+    # Tests for routes.get_release_data image passthrough
+    def test_keeps_chosen_image_url(self):
+        from databass.routes import get_release_data
+
+        data = get_release_data(
+            {
+                "release_name": "Test Album",
+                "year": "2020",
+                "rating": "50",
+                "image": "http://example.com/art.png",
+                "listen_date": "2020-01-01",
+            }
+        )
+
+        assert data["image"] == "http://example.com/art.png"
+
+    def test_no_image_means_none(self):
+        from databass.routes import get_release_data
+
+        data = get_release_data(
+            {
+                "release_name": "Test Album",
+                "year": "2020",
+                "rating": "50",
+                "listen_date": "2020-01-01",
+            }
+        )
+
+        assert data["image"] is None
+
+
 class TestSubmit:
     # Tests for /api/submit
     def test_submit_malformed_request(self, client):

@@ -209,6 +209,57 @@ class Discogs:
         return None
 
     @staticmethod
+    def get_release_images(
+        name: str, artist: Optional[str] = None, limit: int = 4
+    ) -> list[dict]:
+        """
+        Return cover-art candidates for the best-matching Discogs release.
+
+        Each candidate has ``source``, ``url`` (the full-size image), ``thumb``
+        (a 150px thumbnail) and ``label`` (the Discogs image type). Square
+        images are listed first, matching ``find_image``'s heuristic.
+
+        Returns:
+            list[dict]: At most ``limit`` candidates, or an empty list if no
+            matching release (or its images) can be found.
+        """
+        if not name or not isinstance(name, str):
+            return []
+
+        release_id = Discogs.get_item_id(name=name, artist=artist, item_type="release")
+        if not release_id:
+            return []
+
+        try:
+            res = Discogs.request(f"/releases/{release_id}")
+        except requests.RequestException:
+            return []
+
+        images = [
+            img
+            for img in res.get("images") or []
+            if isinstance(img, dict) and img.get("uri")
+        ]
+        images.sort(
+            key=lambda img: 0
+            if img.get("height") is not None and img.get("height") == img.get("width")
+            else 1
+        )
+
+        candidates = []
+        for img in images[:limit]:
+            url = img["uri"]
+            candidates.append(
+                {
+                    "source": "discogs",
+                    "url": url,
+                    "thumb": img.get("uri150") or url,
+                    "label": img.get("type"),
+                }
+            )
+        return candidates
+
+    @staticmethod
     def get_artist_image_url(name: str) -> Optional[str]:
         """
         Retrieves the URL of the image associated with the specified Discogs artist.
