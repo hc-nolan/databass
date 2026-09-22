@@ -9,11 +9,17 @@ on:
 
 jobs:
   opencode:
+    # Only trusted commenters (repo owners/members/collaborators) may drive
+    # the agent; it runs with the write-scoped GITHUB_TOKEN and OPENCODE_API_KEY,
+    # so random commenters must not be able to invoke it.
     if: |
-      contains(github.event.comment.body, ' /oc') ||
-      startsWith(github.event.comment.body, '/oc') ||
-      contains(github.event.comment.body, ' /opencode') ||
-      startsWith(github.event.comment.body, '/opencode')
+      (github.event.comment.author_association == 'OWNER' ||
+       github.event.comment.author_association == 'COLLABORATOR' ||
+       github.event.comment.author_association == 'MEMBER') &&
+      (contains(github.event.comment.body, ' /oc') ||
+       startsWith(github.event.comment.body, '/oc') ||
+       contains(github.event.comment.body, ' /opencode') ||
+       startsWith(github.event.comment.body, '/opencode'))
     runs-on: ubuntu-latest
     permissions:
       contents: read
