@@ -1,0 +1,48 @@
+name: opencode-review
+
+# Auto-review every PR as it is opened/updated.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # `use_github_token: true` means we do NOT need the OpenCode GitHub App.
+    # GITHUB_TOKEN needs pull-requests:write to actually post the review.
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run OpenCode review
+        uses: anomalyco/opencode/github@latest
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # OpenCode Go models use the `opencode-go/` prefix.
+          # Verify against `opencode models` locally.
+          model: opencode-go/gpt-5.6-luna
+          variant: high
+          use_github_token: true
+          prompt: |
+            Review this pull request. Be conservative: verify every concern by
+            reading the actual code before you flag it. If you are not highly
+            confident, do not flag it.
+
+            Focus on:
+            - Potential bugs and logic errors
+            - Security issues (injection, authz, secrets, unsafe input)
+            - Race conditions / error handling gaps
+            - Test coverage gaps for the changed behavior
+
+            Skip style, formatting, naming, and docs nits.
+            Post concise findings as a PR review with file:line references.
+            If the change is good, say so briefly.
