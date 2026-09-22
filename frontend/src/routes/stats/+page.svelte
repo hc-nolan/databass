@@ -3,6 +3,7 @@
 	import { apiGet } from '$lib/api';
 	import type { StatsData, StatsPeriod, LeaderboardBoard } from '$lib/types';
 	import { headerState } from '$lib/chrome.svelte';
+	import StatsTabs from '$lib/components/StatsTabs.svelte';
 
 	let data = $state<StatsData | null>(null);
 	let stats = $state<StatsPeriod | null>(null);
@@ -45,6 +46,7 @@
 
 <div class="mx-auto flex max-w-[1440px] flex-col gap-5 p-7">
 	<div class="flex flex-wrap items-center gap-4">
+		<StatsTabs />
 		<h1 class="text-lg font-bold tracking-widest uppercase">Listening habits</h1>
 		<div class="border-border bg-panel flex gap-1 rounded-lg border p-1">
 			{#if data}
