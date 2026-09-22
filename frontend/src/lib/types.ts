@@ -267,6 +267,85 @@ export interface LeaderboardsResponse {
 	boards: LeaderboardBoard[];
 }
 
+// --- Stats "explore" (query builder) ---
+
+export interface ExploreFilterRow {
+	field: string;
+	op: 'contains' | 'eq' | 'overlaps' | 'between' | 'gte' | 'lte';
+	value: string | number | [number | null, number | null];
+}
+
+export interface ExploreSpec {
+	group_by: string;
+	metric: string;
+	min_items: number;
+	order: 'desc' | 'asc';
+	limit: number;
+	filters: ExploreFilterRow[];
+}
+
+export interface ExploreFieldDef {
+	value: string;
+	label: string;
+	kind: 'text' | 'enum' | 'years' | 'range';
+	options?: string;
+}
+
+/** UI-side copy of one filter row; converted to an ExploreFilterRow when run. */
+export interface ExploreFilterState {
+	field: string;
+	kind: ExploreFieldDef['kind'];
+	text?: string;
+	enumValue?: string;
+	lo?: string;
+	hi?: string;
+}
+
+export interface ExploreOptions {
+	fields: ExploreFieldDef[];
+	group_bys: { value: string; label: string }[];
+	metrics: { value: string; label: string }[];
+	options: {
+		artist_countries: [string, string][];
+		label_countries: [string, string][];
+		release_countries: [string, string][];
+		artist_types: string[];
+		label_types: string[];
+		genres: string[];
+	};
+	bounds: Record<string, [number, number]>;
+	defaults: {
+		group_by: string;
+		metric: string;
+		min_items: number;
+		order: 'desc' | 'asc';
+		limit: number;
+	};
+}
+
+export interface ExploreRow {
+	label: string;
+	value: number;
+	count: number;
+	id?: number;
+	href?: string;
+	display: string;
+	sub?: string;
+}
+
+export interface ExploreResponse {
+	rows: ExploreRow[];
+	meta: {
+		total_matched: number;
+		total_groups: number;
+		dimension_label: string;
+		metric_label: string;
+		order: 'desc' | 'asc';
+		group_by: string;
+		metric: string;
+	};
+}
+
 export interface GoalMetric {
 	label: string;
 	value: string | number;

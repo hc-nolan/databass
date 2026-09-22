@@ -27,6 +27,7 @@ from .db.util import handle_submit_data
 from .errors.util import friendly_message, integrity_error_message
 from .pagination import Pager
 from . import stats2
+from . import explore
 
 
 def image_exists(itemtype: str, itemid: int) -> bool:
@@ -598,6 +599,21 @@ def register_routes(app):
     def api_stats_leaderboards(stats_type):
         entity = models.Label if stats_type == "labels" else models.Artist
         return jsonify({"boards": stats2.build_leaderboards(entity)})
+
+    @app.route("/api/explore/options", methods=["GET"])
+    def api_explore_options():
+        return jsonify(explore.explore_options())
+
+    @app.route("/api/explore", methods=["POST"])
+    def api_explore():
+        data = request.get_json()
+        if not isinstance(data, dict) or not data:
+            return jsonify({"error": "/api/explore received an empty payload"}), 400
+        try:
+            result = explore.run_query(data)
+        except explore.ExploreError as err:
+            return jsonify({"error": str(err)}), 400
+        return jsonify(result)
 
     @app.route("/api/goals", methods=["GET"])
     def api_goals():
