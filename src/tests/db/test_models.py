@@ -10,7 +10,7 @@ from databass.db.models import (
     mean_avg_and_count,
     bayesian_avg,
 )
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 @pytest.fixture
@@ -1564,6 +1564,30 @@ class TestGoalNewReleasesSinceStartDate:
         goal = Goal(start=datetime.now(), end=datetime.now())
         result = goal.new_releases_since_start_date
         assert result == count_value
+
+
+class TestGoalProgressEnd:
+    """Progress windows cap only currently active, incomplete goals."""
+
+    def test_completed_goal_keeps_configured_future_end(self):
+        configured_end = datetime.now().replace(microsecond=0) + timedelta(days=30)
+        goal = Goal(
+            start=datetime.now() - timedelta(days=10),
+            end=configured_end,
+            completed=datetime.now(),
+        )
+
+        assert goal._progress_end == configured_end
+
+    def test_active_incomplete_goal_caps_at_now(self):
+        goal = Goal(
+            start=datetime.now() - timedelta(days=10),
+            end=datetime.now() + timedelta(days=30),
+            completed=None,
+        )
+
+        assert goal._progress_end < goal.end
+        assert goal._progress_end <= datetime.now()
 
 
 class TestGoalCurrentAmount:

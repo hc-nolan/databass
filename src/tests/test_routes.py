@@ -2,7 +2,7 @@ import pytest
 from databass import create_app
 from databass.db.models import Goal
 from databass.routes import country_code
-from datetime import datetime
+from datetime import datetime, timedelta
 
 
 @pytest.fixture()
@@ -19,6 +19,23 @@ class TestHome:
         response = client.get("/api/home")
         assert response.status_code == 200
         assert "total_logged" in response.json
+
+    def test_home_does_not_show_expired_goal(self, client, mocker):
+        now = datetime.now()
+        expired = Goal(
+            id=1,
+            start=now - timedelta(days=365),
+            end=now - timedelta(days=1),
+            completed=None,
+            type="release",
+            amount=1500,
+        )
+        mocker.patch("databass.db.models.Goal.get_incomplete", return_value=[expired])
+
+        response = client.get("/api/home")
+
+        assert response.status_code == 200
+        assert response.json["goal"] is None
 
 
 class TestNew:
@@ -337,6 +354,81 @@ class TestGoals:
         assert response.status_code == 200
         assert response.json["active_goal"]["target"] == 250
         assert response.json["active_goal"]["type_label"] == "releases"
+
+    def test_goals_selects_newest_goal_containing_today(self, client, mocker):
+        """Stale/future goals must not displace the newest genuinely active goal."""
+        now = datetime.now()
+        stale = Goal(
+            id=1,
+            start=now - timedelta(days=500),
+            end=now - timedelta(days=1),
+            completed=None,
+            type="release",
+            amount=1500,
+        )
+        future = Goal(
+            id=2,
+            start=now + timedelta(days=1),
+            end=now + timedelta(days=365),
+            completed=None,
+            type="artist",
+            amount=50,
+        )
+        older_active = Goal(
+            id=3,
+            start=now - timedelta(days=100),
+            end=now + timedelta(days=100),
+            completed=None,
+            type="release",
+            amount=250,
+        )
+        newer_active = Goal(
+            id=4,
+            start=now - timedelta(days=10),
+            end=now + timedelta(days=100),
+            completed=None,
+            type="label",
+            amount=25,
+        )
+        mocker.patch(
+            "databass.db.models.Goal.get_incomplete",
+            return_value=[stale, future, older_active, newer_active],
+        )
+        mocker.patch("databass.db.models.Goal.get_past", return_value=[])
+
+        response = client.get("/api/goals")
+
+        assert response.status_code == 200
+        assert response.json["active_goal"]["target"] == 25
+        assert response.json["active_goal"]["type_label"] == "labels"
+
+    def test_goals_have_no_active_goal_when_only_stale_or_future(self, client, mocker):
+        now = datetime.now()
+        stale = Goal(
+            id=1,
+            start=now - timedelta(days=10),
+            end=now - timedelta(days=1),
+            completed=None,
+            type="release",
+            amount=100,
+        )
+        future = Goal(
+            id=2,
+            start=now + timedelta(days=1),
+            end=now + timedelta(days=10),
+            completed=None,
+            type="release",
+            amount=100,
+        )
+        mocker.patch(
+            "databass.db.models.Goal.get_incomplete", return_value=[stale, future]
+        )
+        mocker.patch("databass.db.models.Goal.get_past", return_value=[])
+
+        response = client.get("/api/goals")
+
+        assert response.status_code == 200
+        assert response.json["active_goal"] is None
 
     def test_goals_past_goals_displayed(self, client, mocker):
         """

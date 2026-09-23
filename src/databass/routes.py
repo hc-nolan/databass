@@ -236,12 +236,25 @@ def build_browse_entity_item(row, entity_type: str) -> dict:
     }
 
 
+def _current_active_goal() -> "models.Goal | None":
+    """Return the newest incomplete goal whose window contains today.
+
+    All surfaces that mention an active goal must use the same definition;
+    otherwise an expired goal can leak onto the home/new pages even while the
+    Goals page correctly shows it under Past goals.
+    """
+    now = datetime.now()
+    incomplete_goals = models.Goal.get_incomplete() or []
+    active_goals = [g for g in incomplete_goals if g.start <= now <= g.end]
+    return max(active_goals, key=lambda g: (g.start, g.id or 0), default=None)
+
+
 def _home_payload() -> dict:
     """Shared data for the home page and its /api/home counterpart."""
-    active_goals = models.Goal.get_incomplete()
     goal = None
-    if active_goals:
-        goal = process_goal_data(active_goals[0])
+    active_goal = _current_active_goal()
+    if active_goal:
+        goal = process_goal_data(active_goal)
         current_pace = models.Release.added_per_day_this_year()
         goal["on_track"] = current_pace >= goal["target"]
 
@@ -306,9 +319,9 @@ def _new_payload() -> dict:
     """Shared data for the new-release page and its /api/new counterpart."""
     all_genres = sorted(models.Genre.get_distinct_column_values("name"))
     goal_nudge = None
-    active_goals = models.Goal.get_incomplete()
-    if active_goals:
-        g_data = process_goal_data(active_goals[0])
+    active_goal = _current_active_goal()
+    if active_goal:
+        g_data = process_goal_data(active_goal)
         remaining = max(g_data["amount"] - g_data["current"], 0)
         goal_nudge = f"{remaining} to go on your {g_data['end'].year} {g_data['type']} goal"
     return {"all_genres": all_genres, "goal_nudge": goal_nudge}
@@ -383,17 +396,9 @@ def _browse_results_payload(tab: str) -> dict:
 
 def _goals_payload() -> dict:
     """Shared data for the goals page and its /api/goals counterpart."""
-    incomplete_goals = models.Goal.get_incomplete() or []
-    # An incomplete goal past its end date is missed, not active; get_past()
-    # already surfaces it there, so exclude it here to avoid double-counting
-    # it as an in-progress goal with no upper bound on its current_amount.
-    current_incomplete_goals = [
-        g for g in incomplete_goals if g.end >= datetime.now()
-    ]
+    active_goal_model = _current_active_goal()
     active_goal = (
-        build_active_goal_view(current_incomplete_goals[0])
-        if current_incomplete_goals
-        else None
+        build_active_goal_view(active_goal_model) if active_goal_model else None
     )
     past_goals = [build_past_goal_view(g) for g in models.Goal.get_past()]
 
