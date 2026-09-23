@@ -1020,6 +1020,153 @@ class ArtistOrLabel(MusicBrainzEntity):
         return sorted_entities
 
     @classmethod
+    def listen_weighted_ratings(cls) -> list[Row]:
+        """
+        Per-entity listen-weighted rating inputs.
+
+        Each release contributes its rating weighted by ``LB listens + 1``, so
+        heavily-scrobbled releases pull an entity's average harder while
+        one-off logs still count (the ``+1``). Falls back to the plain release
+        average when no ListenBrainz data exists.
+
+        Returns rows with: id, name, image, weighted_sum, total_weight,
+        release_count.
+        """
+        if cls.__tablename__ == "artist":
+            relation_id = Release.artist_id
+        elif cls.__tablename__ == "label":
+            relation_id = Release.label_id
+        else:
+            raise TypeError("Method only supported by Artist and Label classes.")
+
+        from .listenbrainz import Listen
+
+        listen_counts = (
+            app_db.session.query(
+                Listen.release_id.label("release_id"),
+                func.count(Listen.id).label("listen_count"),
+            )
+            .group_by(Listen.release_id)
+            .subquery()
+        )
+        try:
+            return (
+                app_db.session.query(
+                    cls.id,
+                    cls.name,
+                    cls.image,
+                    func.sum(
+                        Release.rating * (func.coalesce(listen_counts.c.listen_count, 0) + 1)
+                    ).label("weighted_sum"),
+                    func.sum(func.coalesce(listen_counts.c.listen_count, 0) + 1).label(
+                        "total_weight"
+                    ),
+                    func.count(Release.id).label("release_count"),
+                )
+                .join(Release, relation_id == cls.id)
+                .outerjoin(listen_counts, listen_counts.c.release_id == Release.id)
+                .where(cls.name.notin_(["[NONE]", "Various Artists"]))
+                .having(func.count(Release.id) > 1)
+                .group_by(cls.id, cls.name, cls.image)
+                .all()
+            )
+        except Exception:
+            return []
+
+    @classmethod
+    def favourites(cls, sort_order: str = "desc") -> list[dict]:
+        """
+        Listen-weighted Bayesian favourite score.
+
+        Like ``average_ratings_bayesian``, but the effective weight of an
+        entity is the total scrobbles behind its releases (plus one per
+        release), so how much you actually listen counts, not just how many
+        releases you logged.
+
+        Returns dicts with id, name, image, rating (0-100), count,
+        releases, and listens.
+        """
+        if not isinstance(sort_order, str) or sort_order not in ["desc", "asc"]:
+            raise ValueError(
+                f"Unrecognized sort order: {sort_order}. Valid orders are: 'desc', 'asc'"
+            )
+
+        rows = cls.listen_weighted_ratings()
+        if not rows:
+            return []
+
+        # Truncate each entity average with int() exactly like
+        # average_ratings_bayesian(), so with no listen data the two produce
+        # identical scores (the weighted average is fractional once listens
+        # exist, but the display scale is whole 0-100 either way).
+        weighted = [
+            (int(row.weighted_sum / row.total_weight), row.total_weight, row)
+            for row in rows
+            if row.total_weight
+        ]
+        if not weighted:
+            return []
+
+        mean_avg = sum(avg for avg, _, _ in weighted) / len(weighted)
+        mean_weight = sum(weight for _, weight, _ in weighted) / len(weighted)
+
+        items = []
+        for avg, weight, row in weighted:
+            shrink = weight / (weight + mean_weight) if (weight + mean_weight) else 0
+            score = shrink * avg + (1 - shrink) * mean_avg
+            items.append(
+                {
+                    "id": row.id,
+                    "name": row.name,
+                    "rating": round(score),
+                    "image": row.image,
+                    "count": row.release_count,
+                    "listens": int(row.total_weight - row.release_count),
+                }
+            )
+
+        order = sort_order != "asc"
+        return sorted(items, key=lambda k: k["rating"], reverse=order)
+
+    @classmethod
+    def most_listened(cls, limit: int = 10) -> list[dict]:
+        """Entities ranked by raw scrobble count (album listens for labels)."""
+        if not isinstance(limit, int) or limit <= 0:
+            raise ValueError("Limit must be a positive integer.")
+
+        from .listenbrainz import Listen
+
+        if cls.__tablename__ == "artist":
+            listens = func.count(Listen.id).label("listens")
+            query = (
+                app_db.session.query(cls.id, cls.name, cls.image, listens)
+                .join(Listen, Listen.artist_id == cls.id)
+                .where(cls.name.notin_(["[NONE]", "Various Artists", ""]))
+                .group_by(cls.id, cls.name, cls.image)
+                .order_by(listens.desc())
+            )
+        elif cls.__tablename__ == "label":
+            listens = func.count(Listen.id).label("listens")
+            query = (
+                app_db.session.query(cls.id, cls.name, cls.image, listens)
+                .join(Release, Release.label_id == cls.id)
+                .join(Listen, Listen.release_id == Release.id)
+                .where(cls.name.notin_(["[NONE]", "Various Artists", "", "[no label]"]))
+                .group_by(cls.id, cls.name, cls.image)
+                .order_by(listens.desc())
+            )
+        else:
+            raise TypeError("Method only supported by Artist and Label classes.")
+
+        try:
+            return [
+                {"id": row.id, "name": row.name, "image": row.image, "listens": row.listens}
+                for row in query.limit(limit).all()
+            ]
+        except Exception:
+            return []
+
+    @classmethod
     def statistic(cls, sort_order: str, metric: str, item_property: str) -> list[dict]:
         # Currently unused
         """

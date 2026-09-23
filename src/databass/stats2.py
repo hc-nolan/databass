@@ -227,14 +227,15 @@ def _bar_rows(names: list[str], values: list[float], formatter) -> list[dict]:
 
 def build_leaderboards(entity, limit: int = 8) -> list[dict]:
     """
-    All-time leaderboards ("most frequent", "highest average", "favourites")
-    for the given entity class (Artist or Label).
+    All-time leaderboards ("most frequent", "highest average", "favourites",
+    "most listened") for the given entity class (Artist or Label).
     """
     frequent = entity.frequency_highest(limit)
     highest_avg = entity.average_ratings_and_total_counts()[:limit]
-    favourites = entity.average_ratings_bayesian()[:limit]
+    favourites = entity.favourites()[:limit]
+    most_listened = entity.most_listened(limit)
 
-    return [
+    boards = [
         {
             "title": "Most frequent",
             "note": "by releases logged",
@@ -255,7 +256,7 @@ def build_leaderboards(entity, limit: int = 8) -> list[dict]:
         },
         {
             "title": "Favourites",
-            "note": "Bayesian average — weights score by how much you've actually logged",
+            "note": "Bayesian average weighted by how much you actually listen",
             "rows": _bar_rows(
                 [item["name"] for item in favourites],
                 [item["rating"] for item in favourites],
@@ -263,6 +264,19 @@ def build_leaderboards(entity, limit: int = 8) -> list[dict]:
             ),
         },
     ]
+    if most_listened:
+        boards.append(
+            {
+                "title": "Most listened",
+                "note": "total ListenBrainz scrobbles",
+                "rows": _bar_rows(
+                    [item["name"] for item in most_listened],
+                    [item["listens"] for item in most_listened],
+                    lambda v: f"{v:,} plays",
+                ),
+            }
+        )
+    return boards
 
 
 def get_genre_shares(limit: int = 6) -> list[dict]:

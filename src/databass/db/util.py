@@ -41,6 +41,8 @@ def ensure_db_placeholders():
     This function ensures these entries exist.
     """
     for model in (Label, Artist):
+        if model.exists_by_id(0):
+            continue
         placeholder = model()
         placeholder.id = 0
         placeholder.name = "Unknown"

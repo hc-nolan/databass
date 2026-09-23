@@ -13,6 +13,7 @@ from sqlalchemy import func, extract
 from .api.musicbrainz import MusicBrainz
 from .db import models
 from .db.base import app_db
+from .listenbrainz_sync import lb_enabled
 from .routes import initials, image_exists, country_name, format_runtime
 
 EXCLUDED_NAMES = ["[NONE]", "Various Artists", "", "[no label]"]
@@ -32,6 +33,30 @@ def _fmt_date(value) -> str:
     if not value:
         return "—"
     return value.strftime("%Y-%m-%d") if hasattr(value, "strftime") else str(value)
+
+
+def _album_release_ids(release: models.Release) -> list[int]:
+    """Every logged Release row representing the same album as `release`.
+
+    Relistens share an MBID, so their scrobbles should surface on all of them;
+    falling back to a name match covers releases logged without an MBID.
+    """
+    if release.mbid:
+        rows = (
+            app_db.session.query(models.Release.id)
+            .filter(models.Release.mbid == release.mbid)
+            .all()
+        )
+    else:
+        rows = (
+            app_db.session.query(models.Release.id)
+            .filter(
+                models.Release.artist_id == release.artist_id,
+                func.lower(models.Release.name) == (release.name or "").casefold(),
+            )
+            .all()
+        )
+    return [row[0] for row in rows] or [release.id]
 
 
 def rail_item(name: str, meta: str, rating, href: str, art_type: str, entity_id: int) -> dict:
@@ -110,6 +135,14 @@ def build_release_detail(release: models.Release) -> dict:
         {"label": "TRACKS", "value": release.track_count, "tone": "ink"},
     ]
 
+    lb_listens = None
+    lb_last = None
+    if lb_enabled():
+        album_ids = _album_release_ids(release)
+        lb_listens = models.Listen.for_release(album_ids)
+        lb_last = models.Listen.last_for_release(album_ids)
+        facts.insert(3, {"label": "LB LISTENS", "value": lb_listens, "tone": "cyan"})
+
     entries = [
         {"id": r.id, "date": r.timestamp.strftime("%Y-%m-%d"), "text": r.text}
         for r in reviews
@@ -166,6 +199,12 @@ def build_release_detail(release: models.Release) -> dict:
             context.append({"label": f"rank in {year}", "value": f"#{rank} of {total}"})
         days_since = (date.today() - release.listen_date.date()).days
         context.append({"label": "days since last listen", "value": str(days_since)})
+
+    if lb_enabled() and lb_last:
+        days_scrobbled = (date.today() - lb_last.date()).days
+        context.append(
+            {"label": "last scrobbled", "value": f"{_fmt_date(lb_last)} · {days_scrobbled}d ago"}
+        )
 
     rails = []
     for credited_artist in ([artist] if has_artist else []) + collab_artists:
@@ -279,6 +318,10 @@ def build_artist_detail(artist: models.Artist) -> dict:
         {"label": "FIRST", "value": _fmt_date(min(listen_dates)) if listen_dates else "—", "tone": "ink"},
         {"label": "LAST", "value": _fmt_date(max(listen_dates)) if listen_dates else "—", "tone": "ink"},
     ]
+    if lb_enabled():
+        facts.insert(
+            1, {"label": "LB LISTENS", "value": models.Listen.for_artist(artist.id), "tone": "cyan"}
+        )
 
     release_items = _release_rail_items(
         releases,
@@ -369,6 +412,10 @@ def build_label_detail(label: models.Label) -> dict:
         {"label": "FIRST", "value": _fmt_date(min(listen_dates)) if listen_dates else "—", "tone": "ink"},
         {"label": "RANK", "value": f"#{rank}" if rank else "—", "tone": "ink"},
     ]
+    if lb_enabled():
+        facts.insert(
+            1, {"label": "LB LISTENS", "value": models.Listen.for_label(label.id), "tone": "cyan"}
+        )
 
     release_items = _release_rail_items(
         releases,

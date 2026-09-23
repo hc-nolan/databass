@@ -6,8 +6,9 @@
 	const tabs = [
 		{ value: 'habits' as const, label: 'habits', href: '/stats' as const },
 		{ value: 'explore' as const, label: 'explore', href: '/stats/explore' as const }
+		, { value: 'listenbrainz' as const, label: 'listenbrainz', href: '/stats/listenbrainz' as const }
 	];
-	const active = $derived(page.url.pathname === '/stats/explore' ? 'explore' : 'habits');
+	const active = $derived(page.url.pathname === '/stats/explore' ? 'explore' : page.url.pathname === '/stats/listenbrainz' ? 'listenbrainz' : 'habits');
 </script>
 
 <div class="flex gap-1 rounded-lg border border-border bg-panel p-1">

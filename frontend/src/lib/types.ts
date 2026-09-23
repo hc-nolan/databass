@@ -161,6 +161,7 @@ export interface HomeData {
 	score_spread: { pct: number; is_peak: boolean }[];
 	median_score: number;
 	on_repeat: OnRepeatArtist[];
+	today: { listens: number; albums: number } | null;
 	total_logged: number;
 	day_of_year: number;
 	current_year: number;
@@ -265,6 +266,27 @@ export interface LeaderboardBoard {
 
 export interface LeaderboardsResponse {
 	boards: LeaderboardBoard[];
+}
+
+export interface ListenBrainzStats {
+	configured: boolean;
+	range: string;
+	imported?: number;
+	listen_count?: number;
+	artists?: { artists?: { artist_name: string; listen_count: number }[]; total_artist_count?: number };
+	releases?: { releases?: { artist_name: string; release_name: string; listen_count: number }[] };
+	recordings?: { recordings?: { artist_name: string; track_name: string; listen_count: number }[] };
+	listening_activity?: { listening_activity?: { time_range: string; listen_count: number }[] };
+	daily_activity?: { daily_activity?: Record<string, { hour: number; listen_count: number }[]> };
+	artist_map?: { artist_map?: { country: string; artist_count: number }[] };
+}
+
+export interface ListenBrainzSuggestion {
+	id: number;
+	artist: string;
+	name: string;
+	listened_at: string;
+	tracks: string[];
 }
 
 // --- Stats "explore" (query builder) ---

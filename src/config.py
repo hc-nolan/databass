@@ -8,6 +8,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _env_int(name: str, default: int) -> int:
+    """Read an integer environment variable, treating empty values as unset."""
+    raw = os.environ.get(name, "").strip()
+    try:
+        return int(raw) if raw else default
+    except ValueError:
+        return default
+
 db_name = os.environ.get('DB_NAME')
 db_user = os.environ.get('PG_USER')
 db_password = os.environ.get('PG_PASSWORD')
@@ -31,3 +40,9 @@ class Config:
     LESS_BIN = '/usr/bin/lessc'
     ASSETS_DEBUG = False
     ASSETS_AUTO_BUILD = True
+    LISTENBRAINZ_USERNAME = os.environ.get('LISTENBRAINZ_USERNAME')
+    LISTENBRAINZ_TOKEN = os.environ.get('LISTENBRAINZ_TOKEN')
+    LISTENBRAINZ_SYNC_INTERVAL_MIN = _env_int('LISTENBRAINZ_SYNC_INTERVAL_MIN', 15)
+    LISTENBRAINZ_BACKFILL_DAYS = _env_int('LISTENBRAINZ_BACKFILL_DAYS', 0)
+    # Keep Flask-APScheduler's REST control endpoints off.
+    SCHEDULER_API_ENABLED = False

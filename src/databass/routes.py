@@ -10,6 +10,7 @@ from datetime import datetime, timedelta, date
 from typing import Optional
 from os.path import join, abspath
 from itertools import groupby
+import os
 import flask
 from flask import (
     request,
@@ -22,12 +23,15 @@ from sqlalchemy.exc import IntegrityError
 import pycountry
 from .api import Util, MusicBrainz, image
 from . import db
+from .db.base import app_db
 from .db import models
 from .db.util import handle_submit_data
 from .errors.util import friendly_message, integrity_error_message
 from .pagination import Pager
 from . import stats2
 from . import explore
+from .api import ListenBrainz
+from .listenbrainz_sync import lb_enabled, sync_listens
 
 
 def image_exists(itemtype: str, itemid: int) -> bool:
@@ -288,6 +292,7 @@ def _home_payload() -> dict:
         "score_spread": score_spread,
         "median_score": distribution["median"],
         "on_repeat": on_repeat,
+        "today": models.Listen.today_summary(os.getenv("TIMEZONE")) if lb_enabled() else None,
     }
 
 
@@ -451,6 +456,110 @@ def _construct_goal_or_error(data: dict) -> tuple["models.Goal | None", str | No
 
 
 def register_routes(app):
+    @app.route("/api/listenbrainz/suggestions", methods=["GET"])
+    def api_listenbrainz_suggestions():
+        if not os.getenv("LISTENBRAINZ_USERNAME"):
+            return jsonify({"suggestions": []})
+        rows = app_db.session.query(models.ScrobbledAlbum).filter_by(status="pending").order_by(
+            models.ScrobbledAlbum.listened_at.desc()
+        ).all()
+        return jsonify({"suggestions": [
+            {"id": row.id, "artist": row.artist_name, "name": row.release_name,
+             "artist_mbid": row.artist_mbid, "release_mbid": row.release_mbid,
+             "release_group_mbid": row.release_group_mbid,
+             "listened_at": row.listened_at.date().isoformat(),
+             "tracks": row.track_names}
+            for row in rows
+        ]})
+
+    @app.route("/api/listenbrainz/sync", methods=["POST"])
+    def api_listenbrainz_sync():
+        try:
+            return jsonify(sync_listens())
+        except Exception as err:
+            return jsonify({"error": friendly_message(err)}), 500
+
+    @app.route("/api/listenbrainz/suggestions/<int:suggestion_id>/<action>", methods=["POST"])
+    def api_listenbrainz_suggestion_action(suggestion_id, action):
+        row = models.ScrobbledAlbum.exists_by_id(suggestion_id)
+        if not row or action not in ("dismiss", "log"):
+            abort(404)
+
+        def claim(new_status: str) -> bool:
+            """Atomically move a pending suggestion to `new_status`."""
+            updated = (
+                app_db.session.query(models.ScrobbledAlbum)
+                .filter_by(id=suggestion_id, status="pending")
+                .update({"status": new_status})
+            )
+            app_db.session.commit()
+            return bool(updated)
+
+        if action == "dismiss":
+            if not claim("dismissed"):
+                return jsonify({"error": "Suggestion is no longer pending"}), 409
+            return jsonify({"ok": True})
+
+        data = request.get_json() or {}
+        if not data.get("main_genre"):
+            return jsonify({"error": "A genre is required to log a listen"}), 400
+        # Claim first so a retried/overlapping log can't insert a second
+        # Release for the same suggestion.
+        if not claim("logged"):
+            return jsonify({"error": "Suggestion is no longer pending"}), 409
+        # handle_submit_data() expects the same keys the /api/submit search
+        # flow produces, i.e. `name`/`mbid` (not release_name/release_mbid).
+        submit = {
+            "release_group_mbid": row.release_group_mbid,
+            "name": row.release_name, "mbid": row.release_mbid,
+            "artist_name": row.artist_name, "artist_mbid": row.artist_mbid,
+            "label_name": None, "label_mbid": None, "year": 0,
+            "main_genre": data.get("main_genre"), "genres": data.get("genres", []),
+            "rating": int(data.get("rating", 0)), "runtime": 0,
+            "track_count": len(row.track_names),
+            "listen_date": row.listened_at, "country": None, "image": None,
+            "note": data.get("note"),
+        }
+        try:
+            completed = handle_submit_data(submit)
+        except Exception as err:
+            # Release the claim so the user can retry after fixing the input.
+            app_db.session.query(models.ScrobbledAlbum).filter_by(
+                id=suggestion_id, status="logged"
+            ).update({"status": "pending"})
+            app_db.session.commit()
+            return jsonify({"error": friendly_message(err)}), 400
+        return jsonify({"ok": True, "completed_goals": [build_completed_goal_notice(g) for g in completed]}), 201
+
+    @app.route("/api/listenbrainz/recommendations", methods=["GET"])
+    def api_listenbrainz_recommendations():
+        username = os.getenv("LISTENBRAINZ_USERNAME")
+        return jsonify({"releases": ListenBrainz.fetch_fresh_releases(username) if username else []})
+
+    @app.route("/api/listenbrainz/stats", methods=["GET"])
+    def api_listenbrainz_stats():
+        username = os.getenv("LISTENBRAINZ_USERNAME")
+        allowed = {"this_week", "this_month", "this_year", "all_time", "week", "month", "year"}
+        range_ = request.args.get("range", "all_time")
+        if range_ not in allowed:
+            return jsonify({"error": "Invalid ListenBrainz stats range"}), 400
+        if not username:
+            return jsonify({"configured": False, "range": range_})
+        cache_key = f"lb_stats:{range_}"
+        cached = app_db.session.query(models.AppSetting).filter_by(key=cache_key).one_or_none()
+        now = datetime.now().timestamp()
+        if cached and isinstance(cached.value, dict) and cached.value.get("expires", 0) > now:
+            return jsonify(
+                {"configured": True, "imported": models.Listen.total(), **cached.value["data"]}
+            )
+        stats = ListenBrainz.fetch_stats(username, range_)
+        if not cached:
+            cached = models.AppSetting(key=cache_key)
+            db.insert(cached)
+        cached.value = {"expires": now + 3600, "data": stats}
+        db.update(cached)
+        return jsonify({"configured": True, "imported": models.Listen.total(), **stats})
+
     @app.route("/img/<string:itemtype>/<int:itemid>", methods=["GET"])
     def serve_image(itemtype: str, itemid: int):
         match itemtype:
@@ -466,6 +575,8 @@ def register_routes(app):
             img_path = abspath(join("databass", item.image))
         else:
             img_path = "./static/img/none.png"
+        if not os.path.isfile(img_path):
+            img_path = abspath("static/img/none.png")
         resp = make_response(send_file(img_path))
         resp.headers["Cache-Control"] = "max-age=600"
         return resp

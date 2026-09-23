@@ -9,6 +9,7 @@
 		NewListenData,
 		SearchResultItem,
 		SubmitResponse
+		, ListenBrainzSuggestion
 	} from '$lib/types';
 	import { headerState } from '$lib/chrome.svelte';
 	import { goalNoticeState } from '$lib/goalNotice.svelte';
@@ -47,6 +48,11 @@
 	let note = $state('');
 	let saved = $state(false);
 	let saving = $state(false);
+	let suggestions = $state<ListenBrainzSuggestion[]>([]);
+	let suggestionBusy = $state<number | null>(null);
+	let suggestionToLog = $state<number | null>(null);
+	let suggestionRating = $state(7);
+	let suggestionGenre = $state('');
 
 	const selected = $derived(selectedIndex != null ? results[selectedIndex] : null);
 	const hasSelection = $derived(manualMode ? manual.name.trim().length > 0 : selected != null);
@@ -67,9 +73,27 @@
 
 	onMount(async () => {
 		data = await apiGet<NewListenData>('/new');
+		try { suggestions = (await apiGet<{ suggestions: ListenBrainzSuggestion[] }>('/listenbrainz/suggestions')).suggestions; } catch { suggestions = []; }
 		listenDate = data.today;
 		if (qRelease || qArtist) doSearch();
 	});
+
+	async function dismissSuggestion(id: number) {
+		suggestionBusy = id;
+		try { await apiPost(`/listenbrainz/suggestions/${id}/dismiss`); suggestions = suggestions.filter((s) => s.id !== id); }
+		finally { suggestionBusy = null; }
+	}
+
+	async function logSuggestion(suggestion: ListenBrainzSuggestion) {
+		suggestionBusy = suggestion.id;
+		try {
+			await apiPost(`/listenbrainz/suggestions/${suggestion.id}/log`, {
+				rating: suggestionRating * 10,
+				main_genre: suggestionGenre || null
+			});
+			suggestions = suggestions.filter((s) => s.id !== suggestion.id);
+		} finally { suggestionBusy = null; }
+	}
 
 	$effect(() => {
 		headerState.counter = counterSnippet;
@@ -207,6 +231,16 @@
 {/snippet}
 
 <div class="flex flex-wrap items-start gap-7 p-7">
+	{#if suggestions.length}
+		<section class="basis-full rounded-xl border border-border bg-panel p-5">
+			<div class="mb-3 flex items-baseline justify-between"><span class="text-xs font-bold tracking-widest text-amber">FROM LISTENBRAINZ</span><span class="text-xs text-muted">probable full-album listens</span></div>
+			<div class="grid gap-2 md:grid-cols-2 lg:grid-cols-3">
+				{#each suggestions as suggestion (suggestion.id)}
+					<div class="flex flex-col gap-2 rounded-lg border border-border-strong bg-panel-alt p-3"><div class="flex items-center justify-between gap-3"><div class="min-w-0"><div class="truncate text-sm font-semibold">{suggestion.name}</div><div class="truncate text-xs text-muted">{suggestion.artist} · {suggestion.listened_at}</div><div class="text-xs text-muted-2">{suggestion.tracks.length} tracks heard</div></div><div class="flex shrink-0 gap-1.5"><button class="rounded-md bg-amber px-2.5 py-1.5 text-xs font-bold text-on-amber disabled:opacity-50" disabled={suggestionBusy === suggestion.id} onclick={() => { suggestionToLog = suggestion.id; suggestionRating = 7; suggestionGenre = data?.all_genres?.[0] ?? ''; }}>LOG</button><button class="rounded-md border border-border-strong px-2.5 py-1.5 text-xs text-muted disabled:opacity-50" disabled={suggestionBusy === suggestion.id} onclick={() => dismissSuggestion(suggestion.id)}>dismiss</button></div></div>{#if suggestionToLog === suggestion.id}<div class="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-2"><span class="text-xs text-muted">rating</span><div class="flex gap-0.5">{#each Array.from({ length: 10 }, (_, i) => i + 1) as n}<button class="h-6 w-6 rounded text-2xs {n <= suggestionRating ? 'bg-amber text-on-amber' : 'border border-border-strong text-muted'}" onclick={() => suggestionRating = n}>{n}</button>{/each}</div><select bind:value={suggestionGenre} class="rounded-md border border-border-strong bg-field px-2 py-1 text-xs text-ink outline-none focus:border-amber"><option value="">genre…</option>{#each data?.all_genres ?? [] as g}<option value={g}>{g}</option>{/each}</select><button class="text-xs font-bold text-cyan disabled:opacity-40" disabled={!suggestionGenre} onclick={() => logSuggestion(suggestion)}>confirm</button></div>{/if}</div>
+				{/each}
+			</div>
+		</section>
+	{/if}
 	<main class="flex min-w-0 flex-1 basis-[560px] flex-col gap-5">
 		<section class="flex flex-col gap-3 rounded-xl border border-border bg-panel p-4.5">
 			<div class="flex items-baseline justify-between gap-3">

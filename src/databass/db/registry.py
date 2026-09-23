@@ -1,5 +1,5 @@
 from .base import app_db
-from .models import Release, Artist, Label, Goal, Genre, Review
+from .models import Release, Artist, Label, Goal, Genre, Review, AppSetting, Listen, ScrobbledAlbum
 
 MODELS = {
     "artist": Artist,
@@ -8,6 +8,9 @@ MODELS = {
     "goal": Goal,
     "genre": Genre,
     "review": Review,
+    "appsetting": AppSetting,
+    "listen": Listen,
+    "scrobbledalbum": ScrobbledAlbum,
 }
 
 
