@@ -80,6 +80,11 @@
 			/>
 			<div class="flex items-center gap-2">
 				<span class="text-xs text-muted tracking-wider">TODAY</span>
+				{#if home?.today}
+					<span class="text-xs text-muted-2">
+						{home.today.listens} listens · {home.today.albums} albums
+					</span>
+				{/if}
 				<button
 					class="bg-amber text-on-amber hover:bg-amber-hover cursor-pointer rounded-md px-3.5 py-1.5 text-sm font-bold tracking-wide"
 					onclick={goLog}

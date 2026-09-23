@@ -71,6 +71,8 @@ def create_app():
 
         register_routes(app)
 
+        _start_listenbrainz_scheduler(app, is_testing)
+
         @app.before_request
         def before_request():
             g.app_version = VERSION
@@ -80,3 +82,55 @@ def create_app():
             g.current_year = today.year
 
         return app
+
+
+def _start_listenbrainz_scheduler(app: Flask, is_testing: bool) -> None:
+    """Start the optional importer once per production app instance."""
+    if is_testing or not os.environ.get("LISTENBRAINZ_USERNAME"):
+        return
+    if not _scheduler_should_start(app):
+        return
+    try:
+        from flask_apscheduler import APScheduler
+        from .listenbrainz_sync import sync_listens
+
+        scheduler = APScheduler()
+        scheduler.init_app(app)
+        scheduler.add_job(
+            id="listenbrainz_sync",
+            func=lambda: _run_listenbrainz_sync(app, sync_listens),
+            trigger="interval",
+            minutes=max(app.config.get("LISTENBRAINZ_SYNC_INTERVAL_MIN", 15), 1),
+            # Run once on boot so a fresh install starts filling immediately
+            # rather than waiting a full interval.
+            next_run_time=datetime.now(),
+            replace_existing=True,
+        )
+        scheduler.start()
+        app.extensions["listenbrainz_scheduler"] = scheduler
+    except Exception as err:  # optional integration must not prevent app startup
+        app.logger.warning("ListenBrainz scheduler unavailable: %s", err)
+
+
+def _scheduler_should_start(app: Flask) -> bool:
+    """Whether this process should own the background importer.
+
+    The Werkzeug dev server runs a reloader parent plus a child; only the child
+    (marked by ``WERKZEUG_RUN_MAIN``) should schedule jobs. Gunicorn has no such
+    split and sets no Werkzeug marker — and ``Config.DEBUG`` is always True
+    here — so production is detected via the compose-provided ``DOCKER`` flag
+    instead of ``app.debug``.
+    """
+    if os.environ.get("WERKZEUG_RUN_MAIN") in ("true", "1"):
+        return True
+    if os.environ.get("DOCKER", "").lower() in ("true", "1"):
+        return True
+    return not app.debug
+
+
+def _run_listenbrainz_sync(app: Flask, sync_fn) -> None:
+    with app.app_context():
+        try:
+            sync_fn()
+        except Exception:
+            app.logger.exception("ListenBrainz sync failed")

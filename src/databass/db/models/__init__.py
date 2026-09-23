@@ -11,6 +11,7 @@ from .catalog import Release, ArtistOrLabel, Label, Artist
 from .goal import Goal
 from .review import Review
 from .genre import Genre
+from .listenbrainz import AppSetting, Listen, ScrobbledAlbum
 
 __all__ = [
     "Base",
@@ -30,4 +31,7 @@ __all__ = [
     "Goal",
     "Review",
     "Genre",
+    "AppSetting",
+    "Listen",
+    "ScrobbledAlbum",
 ]
