@@ -384,12 +384,19 @@ def _browse_results_payload(tab: str) -> dict:
 def _goals_payload() -> dict:
     """Shared data for the goals page and its /api/goals counterpart."""
     incomplete_goals = models.Goal.get_incomplete() or []
-    # An incomplete goal past its end date is missed, not active; get_past()
-    # already surfaces it there, so exclude it here to avoid double-counting
-    # it as an in-progress goal with no upper bound on its current_amount.
-    current_incomplete_goals = [
-        g for g in incomplete_goals if g.end >= datetime.now()
-    ]
+    # Only a goal whose window contains today is active. Incomplete goals that
+    # have ended are missed goals, while future-start goals are not active yet;
+    # get_past() handles the former separately.
+    now = datetime.now()
+    current_incomplete_goals = sorted(
+        (
+            g
+            for g in incomplete_goals
+            if g.start <= now <= g.end
+        ),
+        key=lambda g: (g.start, g.id or 0),
+        reverse=True,
+    )
     active_goal = (
         build_active_goal_view(current_incomplete_goals[0])
         if current_incomplete_goals

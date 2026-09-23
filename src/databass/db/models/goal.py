@@ -19,6 +19,16 @@ class Goal(Base):
     amount: Mapped[int] = mapped_column(Integer)
 
     @property
+    def _progress_end(self) -> datetime:
+        """Return the end of the window that may count toward progress.
+
+        An active goal must not include listens dated after today. For a past
+        goal this remains its historical end date, so its final result is
+        still calculated over the complete goal window.
+        """
+        return min(self.end, datetime.now())
+
+    @property
     def new_releases_since_start_date(self):
         """
         Returns the count of releases with a listen_date within the Goal's
@@ -27,7 +37,10 @@ class Goal(Base):
         """
         return (
             app_db.session.query(func.count(Release.id))
-            .filter(Release.listen_date >= self.start, Release.listen_date <= self.end)
+            .filter(
+                Release.listen_date >= self.start,
+                Release.listen_date <= self._progress_end,
+            )
             .scalar()
         )
 
@@ -39,7 +52,10 @@ class Goal(Base):
         """
         return (
             app_db.session.query(func.count(distinct(Release.artist_id)))
-            .filter(Release.listen_date >= self.start, Release.listen_date <= self.end)
+            .filter(
+                Release.listen_date >= self.start,
+                Release.listen_date <= self._progress_end,
+            )
             .scalar()
         )
 
@@ -51,7 +67,10 @@ class Goal(Base):
         """
         return (
             app_db.session.query(func.count(distinct(Release.label_id)))
-            .filter(Release.listen_date >= self.start, Release.listen_date <= self.end)
+            .filter(
+                Release.listen_date >= self.start,
+                Release.listen_date <= self._progress_end,
+            )
             .scalar()
         )
 
