@@ -14,6 +14,7 @@
 	import { goalNoticeState } from '$lib/goalNotice.svelte';
 	import { ratingHint } from '$lib/format';
 	import ArtPlaceholder from '$lib/components/ArtPlaceholder.svelte';
+	import GenrePicker from '$lib/components/GenrePicker.svelte';
 
 	let data = $state<NewListenData | null>(null);
 	let qRelease = $state(pageState.url.searchParams.get('q') ?? '');
@@ -43,7 +44,6 @@
 	let rating = $state(7);
 	let listenDate = $state('');
 	let genres = $state<string[]>([]);
-	let newGenre = $state('');
 	let note = $state('');
 	let saved = $state(false);
 	let saving = $state(false);
@@ -141,16 +141,6 @@
 		return c.label ? `${c.label} art from ${c.source}` : `art from ${c.source}`;
 	}
 
-	function toggleGenre(name: string) {
-		genres = genres.includes(name) ? genres.filter((g) => g !== name) : [...genres, name];
-	}
-
-	function addGenre() {
-		const name = newGenre.trim();
-		if (name && !genres.includes(name)) genres = [...genres, name];
-		newGenre = '';
-	}
-
 	function clearForm() {
 		rating = 7;
 		genres = [];
@@ -218,11 +208,11 @@
 
 <div class="flex flex-wrap items-start gap-7 p-7">
 	<main class="flex min-w-0 flex-1 basis-[560px] flex-col gap-5">
-		<section class="border-border bg-panel flex flex-col gap-3 rounded-xl border p-4.5">
+		<section class="flex flex-col gap-3 rounded-xl border border-border bg-panel p-4.5">
 			<div class="flex items-baseline justify-between gap-3">
-				<span class="text-amber text-sm font-bold tracking-widest">SEARCH MUSICBRAINZ</span>
+				<span class="text-sm font-bold tracking-widest text-amber">SEARCH MUSICBRAINZ</span>
 				<button
-					class="border-border-strong text-muted hover:border-border-hover hover:text-ink cursor-pointer rounded-md border px-2.5 py-1 text-xs"
+					class="cursor-pointer rounded-md border border-border-strong px-2.5 py-1 text-xs text-muted hover:border-border-hover hover:text-ink"
 					onclick={() => (manualMode = !manualMode)}
 				>
 					{manualMode ? 'search instead' : 'manual entry'}
@@ -234,37 +224,37 @@
 					<input
 						placeholder="release name"
 						bind:value={manual.name}
-						class="border-border-strong bg-field focus:border-amber col-span-2 rounded-lg border px-3 py-2 text-base outline-none"
+						class="col-span-2 rounded-lg border border-border-strong bg-field px-3 py-2 text-base outline-none focus:border-amber"
 					/>
 					<input
 						placeholder="artist"
 						bind:value={manual.artist}
-						class="border-border-strong bg-field focus:border-amber rounded-lg border px-3 py-2 text-base outline-none"
+						class="rounded-lg border border-border-strong bg-field px-3 py-2 text-base outline-none focus:border-amber"
 					/>
 					<input
 						placeholder="label"
 						bind:value={manual.label}
-						class="border-border-strong bg-field focus:border-amber rounded-lg border px-3 py-2 text-base outline-none"
+						class="rounded-lg border border-border-strong bg-field px-3 py-2 text-base outline-none focus:border-amber"
 					/>
 					<input
 						placeholder="year"
 						bind:value={manual.year}
-						class="border-border-strong bg-field focus:border-amber rounded-lg border px-3 py-2 text-base outline-none"
+						class="rounded-lg border border-border-strong bg-field px-3 py-2 text-base outline-none focus:border-amber"
 					/>
 					<input
 						placeholder="country"
 						bind:value={manual.country}
-						class="border-border-strong bg-field focus:border-amber rounded-lg border px-3 py-2 text-base outline-none"
+						class="rounded-lg border border-border-strong bg-field px-3 py-2 text-base outline-none focus:border-amber"
 					/>
 					<input
 						placeholder="track count"
 						bind:value={manual.track_count}
-						class="border-border-strong bg-field focus:border-amber rounded-lg border px-3 py-2 text-base outline-none"
+						class="rounded-lg border border-border-strong bg-field px-3 py-2 text-base outline-none focus:border-amber"
 					/>
 					<input
 						placeholder="runtime (minutes)"
 						bind:value={manual.runtime}
-						class="border-border-strong bg-field focus:border-amber rounded-lg border px-3 py-2 text-base outline-none"
+						class="rounded-lg border border-border-strong bg-field px-3 py-2 text-base outline-none focus:border-amber"
 					/>
 				</div>
 			{:else}
@@ -273,22 +263,22 @@
 						placeholder="release"
 						bind:value={qRelease}
 						onkeydown={(e) => e.key === 'Enter' && doSearch()}
-						class="border-border-strong bg-field focus:border-amber min-w-[200px] flex-[2_1_200px] rounded-lg border px-3 py-2.5 text-base outline-none"
+						class="min-w-[200px] flex-[2_1_200px] rounded-lg border border-border-strong bg-field px-3 py-2.5 text-base outline-none focus:border-amber"
 					/>
 					<input
 						placeholder="artist"
 						bind:value={qArtist}
 						onkeydown={(e) => e.key === 'Enter' && doSearch()}
-						class="border-border-strong bg-field focus:border-amber min-w-[150px] flex-1 rounded-lg border px-3 py-2.5 text-base outline-none"
+						class="min-w-[150px] flex-1 rounded-lg border border-border-strong bg-field px-3 py-2.5 text-base outline-none focus:border-amber"
 					/>
 					<input
 						placeholder="label"
 						bind:value={qLabel}
 						onkeydown={(e) => e.key === 'Enter' && doSearch()}
-						class="border-border-strong bg-field focus:border-amber min-w-[150px] flex-1 rounded-lg border px-3 py-2.5 text-base outline-none"
+						class="min-w-[150px] flex-1 rounded-lg border border-border-strong bg-field px-3 py-2.5 text-base outline-none focus:border-amber"
 					/>
 					<button
-						class="bg-amber text-on-amber hover:bg-amber-hover cursor-pointer rounded-lg px-5 py-2.5 text-sm font-bold tracking-wide disabled:opacity-50"
+						class="cursor-pointer rounded-lg bg-amber px-5 py-2.5 text-sm font-bold tracking-wide text-on-amber hover:bg-amber-hover disabled:opacity-50"
 						disabled={searching}
 						onclick={doSearch}
 					>
@@ -312,20 +302,18 @@
 						onclick={() => selectResult(i)}
 						class="grid cursor-pointer grid-cols-[52px_minmax(0,1fr)_auto] items-center gap-4 rounded-lg border p-3 text-left {selectedIndex ===
 						i
-							? 'bg-hover border-amber'
-							: 'bg-panel-alt border-line hover:border-border-hover'}"
+							? 'border-amber bg-hover'
+							: 'border-line bg-panel-alt hover:border-border-hover'}"
 					>
-						<div
-							class="cover flex h-13 w-13 shrink-0 items-center justify-center rounded-xs"
-						>
-							<span class="text-2xs text-muted-2 font-bold tracking-wider">{r.initials}</span>
+						<div class="cover flex h-13 w-13 shrink-0 items-center justify-center rounded-xs">
+							<span class="text-2xs font-bold tracking-wider text-muted-2">{r.initials}</span>
 						</div>
 						<div class="flex min-w-0 flex-col gap-1">
 							<div class="flex flex-wrap items-baseline gap-2">
 								<span class="text-md font-medium">{r.release.name}</span>
 								{#if r.logged}
 									<span
-										class="bg-cyan-soft-bg text-cyan-soft-fg rounded-full px-1.5 py-px text-[9.5px] font-bold tracking-wider"
+										class="rounded-full bg-cyan-soft-bg px-1.5 py-px text-[9.5px] font-bold tracking-wider text-cyan-soft-fg"
 									>
 										ALREADY LOGGED
 									</span>
@@ -337,7 +325,7 @@
 								<span>{r.label.name}</span>
 							</div>
 						</div>
-						<div class="text-sm text-muted flex flex-wrap justify-end gap-3.5">
+						<div class="flex flex-wrap justify-end gap-3.5 text-sm text-muted">
 							<span>{r.date ?? ''}</span>
 							<span>{r.track_count ?? '—'} tr</span>
 							<span>{r.country ?? ''}</span>
@@ -350,16 +338,16 @@
 	</main>
 
 	<aside
-		class="border-border-strong bg-panel sticky top-7 flex min-w-[300px] flex-1 basis-[340px] flex-col gap-4 rounded-xl border p-5.5"
+		class="sticky top-7 flex min-w-[300px] flex-1 basis-[340px] flex-col gap-4 rounded-xl border border-border-strong bg-panel p-5.5"
 	>
 		<div class="flex items-baseline justify-between gap-2.5">
-			<span class="text-amber text-sm font-bold tracking-widest">LOG THIS LISTEN</span>
+			<span class="text-sm font-bold tracking-widest text-amber">LOG THIS LISTEN</span>
 			<span class="text-xs text-muted-2">⏎ to save</span>
 		</div>
 
 		{#if !hasSelection}
 			<div
-				class="border-border-strong rounded-lg border border-dashed p-7 text-center text-sm text-muted-2 leading-relaxed"
+				class="rounded-lg border border-dashed border-border-strong p-7 text-center text-sm leading-relaxed text-muted-2"
 			>
 				Pick a result to fill this in.<br />Everything below stays editable.
 			</div>
@@ -386,9 +374,9 @@
 				{#if !manualMode && selected && (artLoading || artSearched)}
 					<div class="flex flex-col gap-2">
 						<div class="flex flex-wrap items-center gap-2">
-							<span class="text-xs text-muted tracking-wider">ALBUM ART</span>
+							<span class="text-xs tracking-wider text-muted">ALBUM ART</span>
 							{#if artLoading}
-								<span class="text-xs text-muted-2 animate-pulse"
+								<span class="animate-pulse text-xs text-muted-2"
 									>searching CoverArtArchive + Discogs…</span
 								>
 							{:else if artCandidates.length === 0}
@@ -398,17 +386,18 @@
 						{#if artLoading}
 							<div class="flex gap-1.5">
 								{#each [0, 1, 2, 3] as i (i)}
-									<div class="bg-field h-13 w-13 animate-pulse rounded-xs"></div>
+									<div class="h-13 w-13 animate-pulse rounded-xs bg-field"></div>
 								{/each}
 							</div>
 						{:else if artCandidates.length > 0}
 							<div class="flex flex-col gap-1.5">
 								{#each artGroups as group (group.source)}
 									<div class="flex flex-wrap items-center gap-1.5">
-										<span class="text-2xs text-muted-2 font-bold tracking-wider">{group.label}</span>
+										<span class="text-2xs font-bold tracking-wider text-muted-2">{group.label}</span
+										>
 										{#each group.items as c (c.url)}
 											<button
-												class="bg-field h-13 w-13 shrink-0 cursor-pointer overflow-hidden rounded-xs border {chosenArt?.url ===
+												class="h-13 w-13 shrink-0 cursor-pointer overflow-hidden rounded-xs border bg-field {chosenArt?.url ===
 												c.url
 													? 'border-amber'
 													: 'border-border-strong hover:border-border-hover'}"
@@ -427,7 +416,7 @@
 
 				<div class="flex flex-col gap-2">
 					<div class="flex items-baseline justify-between">
-						<span class="text-xs text-muted tracking-wider">RATING</span>
+						<span class="text-xs tracking-wider text-muted">RATING</span>
 						<span class="text-sm text-muted">{rating}.0 / 10</span>
 					</div>
 					<div class="flex gap-1">
@@ -435,7 +424,7 @@
 							<button
 								class="h-7.5 flex-1 cursor-pointer rounded text-xs {n <= rating
 									? 'bg-amber text-on-amber'
-									: 'bg-field text-muted border-border-strong border'}"
+									: 'border border-border-strong bg-field text-muted'}"
 								onclick={() => (rating = n)}
 							>
 								{n}
@@ -446,64 +435,39 @@
 				</div>
 
 				<label class="flex flex-col gap-1.5">
-					<span class="text-xs text-muted tracking-wider">LISTENED</span>
+					<span class="text-xs tracking-wider text-muted">LISTENED</span>
 					<input
 						type="date"
 						bind:value={listenDate}
-						class="border-border-strong bg-field focus:border-amber rounded-md border px-2.5 py-2 text-sm outline-none"
+						class="rounded-md border border-border-strong bg-field px-2.5 py-2 text-sm outline-none focus:border-amber"
 					/>
 				</label>
 
 				<div class="flex flex-col gap-2">
-					<span class="text-xs text-muted tracking-wider">GENRE</span>
-					<div class="flex flex-wrap gap-1.5">
-						{#each data?.all_genres ?? [] as name (name)}
-							<button
-								class="cursor-pointer rounded-full border px-2.5 py-1 text-xs {genres.includes(name)
-									? 'border-amber-soft-border bg-amber-soft-bg text-amber-soft-fg'
-									: 'border-border-strong text-muted hover:text-ink'}"
-								onclick={() => toggleGenre(name)}
-							>
-								{name}
-							</button>
-						{/each}
-						{#each genres.filter((g) => !(data?.all_genres ?? []).includes(g)) as name (name)}
-							<button
-								class="border-amber-soft-border bg-amber-soft-bg text-amber-soft-fg cursor-pointer rounded-full border px-2.5 py-1 text-xs"
-								onclick={() => toggleGenre(name)}
-							>
-								{name} ×
-							</button>
-						{/each}
-					</div>
-					<input
-						placeholder="+ add genre"
-						bind:value={newGenre}
-						onkeydown={(e) => e.key === 'Enter' && addGenre()}
-						class="border-border-strong bg-field focus:border-amber rounded-md border px-2.5 py-2 text-sm outline-none"
-					/>
+					<span class="text-xs tracking-wider text-muted">GENRE</span>
+					<GenrePicker bind:selected={genres} allGenres={data?.all_genres ?? []} />
 				</div>
 
 				<label class="flex flex-col gap-1.5">
-					<span class="text-xs text-muted tracking-wider">NOTE — OPTIONAL</span>
+					<span class="text-xs tracking-wider text-muted">NOTE — OPTIONAL</span>
 					<textarea
 						rows="3"
 						placeholder="what did it feel like?"
 						bind:value={note}
-						class="border-border-strong bg-field focus:border-amber resize-y rounded-md border p-2.5 text-sm italic outline-none"
+						class="resize-y rounded-md border border-border-strong bg-field p-2.5 text-sm italic outline-none focus:border-amber"
 					></textarea>
 				</label>
 
 				<div class="flex items-center gap-2.5">
 					<button
-						class="bg-amber text-on-amber hover:bg-amber-hover flex-1 cursor-pointer rounded-lg px-4 py-2.5 text-sm font-bold tracking-wide disabled:opacity-60"
+						class="flex-1 cursor-pointer rounded-lg bg-amber px-4 py-2.5 text-sm font-bold tracking-wide text-on-amber hover:bg-amber-hover disabled:opacity-60"
 						disabled={saving}
 						onclick={save}
 					>
 						{saved ? 'SAVED ✓' : saving ? 'SAVING…' : 'SAVE LISTEN'}
 					</button>
 					<button
-						class="border-border-strong text-muted hover:text-ink cursor-pointer rounded-lg border px-3.5 py-2.5 text-sm"
+						class="cursor-pointer rounded-lg border border-border-strong px-3.5 py-2.5 text-sm text-muted hover:text-ink"
 						onclick={clearForm}
 					>
 						clear
