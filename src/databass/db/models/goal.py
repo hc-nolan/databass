@@ -22,11 +22,14 @@ class Goal(Base):
     def _progress_end(self) -> datetime:
         """Return the end of the window that may count toward progress.
 
-        An active goal must not include listens dated after today. For a past
-        goal this remains its historical end date, so its final result is
-        still calculated over the complete goal window.
+        An incomplete active goal must not include listens dated after today.
+        Completed and past goals retain their configured end date so their
+        historical result is calculated over the complete goal window.
         """
-        return min(self.end, datetime.now())
+        now = datetime.now()
+        if self.completed is None and self.start <= now < self.end:
+            return now
+        return self.end
 
     @property
     def new_releases_since_start_date(self):
