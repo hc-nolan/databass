@@ -486,9 +486,13 @@ def register_routes(app):
             db.update(row)
             return jsonify({"ok": True})
         data = request.get_json() or {}
+        if not data.get("main_genre"):
+            return jsonify({"error": "A genre is required to log a listen"}), 400
+        # handle_submit_data() expects the same keys the /api/submit search
+        # flow produces, i.e. `name`/`mbid` (not release_name/release_mbid).
         submit = {
             "release_group_mbid": row.release_group_mbid,
-            "release_name": row.release_name, "release_mbid": row.release_mbid,
+            "name": row.release_name, "mbid": row.release_mbid,
             "artist_name": row.artist_name, "artist_mbid": row.artist_mbid,
             "label_name": None, "label_mbid": None, "year": 0,
             "main_genre": data.get("main_genre"), "genres": data.get("genres", []),

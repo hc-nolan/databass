@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import os
+import threading
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+from sqlalchemy.exc import IntegrityError
 
 from .api import ListenBrainz
 from .db.base import app_db
@@ -19,6 +22,10 @@ PAGE_SIZE = 1000
 # Only recent history should surface as "log this listen" suggestions; a
 # full-history backfill must not dump thousands of old recommendations.
 SUGGESTION_WINDOW_DAYS = 30
+
+# A manual "sync now" can overlap the scheduler's job in the same process;
+# serialise them so the check-then-insert dedupe can't race.
+_sync_lock = threading.Lock()
 
 
 def lb_enabled() -> bool:
@@ -209,7 +216,12 @@ def _import_batch(batch: list[dict], index: CatalogIndex) -> tuple[int, int]:
         imported += 1
 
     suggestions = _store_suggestions(batch)
-    app_db.session.commit()
+    try:
+        app_db.session.commit()
+    except IntegrityError:
+        # A duplicate slipped past the pre-check (e.g. a concurrent sync in
+        # another process); drop the batch and let the next run retry.
+        app_db.session.rollback()
     return imported, suggestions
 
 
@@ -383,17 +395,33 @@ def sync_listens(page_limit: int = BACKFILL_PAGE_LIMIT) -> dict:
     if not username:
         return {"imported": 0, "suggestions": 0, "backfill_done": False}
 
-    backfill_done = bool(_get_setting("lb_backfill_done") and _get_setting("lb_backfill_done").value)
-    if backfill_done:
-        imported, suggestions = _run_incremental(username, page_limit)
-    else:
-        imported, suggestions = _run_backfill(username, page_limit)
-        backfill_done = bool(_get_setting("lb_backfill_done").value)
+    # Non-blocking: if a sync is already running (scheduler vs "sync now"),
+    # skip this one rather than racing on the same unique listens.
+    if not _sync_lock.acquire(blocking=False):
+        return {
+            "imported": 0,
+            "suggestions": 0,
+            "backfill_done": _backfill_done(),
+            "total": Listen.total(),
+            "busy": True,
+        }
+    try:
+        if _backfill_done():
+            imported, suggestions = _run_incremental(username, page_limit)
+        else:
+            imported, suggestions = _run_backfill(username, page_limit)
 
-    relink_unmatched()
-    return {
-        "imported": imported,
-        "suggestions": suggestions,
-        "backfill_done": backfill_done,
-        "total": Listen.total(),
-    }
+        relink_unmatched()
+        return {
+            "imported": imported,
+            "suggestions": suggestions,
+            "backfill_done": _backfill_done(),
+            "total": Listen.total(),
+        }
+    finally:
+        _sync_lock.release()
+
+
+def _backfill_done() -> bool:
+    setting = _get_setting("lb_backfill_done")
+    return bool(setting and setting.value)

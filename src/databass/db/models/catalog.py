@@ -1095,8 +1095,12 @@ class ArtistOrLabel(MusicBrainzEntity):
         if not rows:
             return []
 
+        # Truncate each entity average with int() exactly like
+        # average_ratings_bayesian(), so with no listen data the two produce
+        # identical scores (the weighted average is fractional once listens
+        # exist, but the display scale is whole 0-100 either way).
         weighted = [
-            (row.weighted_sum / row.total_weight, row.total_weight, row)
+            (int(row.weighted_sum / row.total_weight), row.total_weight, row)
             for row in rows
             if row.total_weight
         ]

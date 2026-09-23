@@ -48,3 +48,15 @@ def test_normalize_listen_reads_mbid_mapping():
     assert result["artist_mbid"] == "artist-id"
     assert result["release_mbid"] == "release-id"
     assert result["recording_mbid"] == "recording-id"
+
+
+def test_get_retries_on_rate_limit(mocker):
+    """A 429 should be retried (after the backoff) rather than raising."""
+    rate_limited = mocker.Mock(status_code=429, headers={})
+    ok = mocker.Mock(status_code=200)
+    ok.json.return_value = {"ok": True}
+    mocker.patch(
+        "databass.api.listenbrainz.requests.get", side_effect=[rate_limited, ok]
+    )
+    mocker.patch.object(ListenBrainz, "_sleep_for_retry")
+    assert ListenBrainz._get("/anything") == {"ok": True}

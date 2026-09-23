@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -31,7 +31,9 @@ class ScrobbledAlbum(Base):
     listened_at: Mapped[datetime] = mapped_column(DateTime, index=True)
     track_names: Mapped[list[str]] = mapped_column(JSON, default=list)
     status: Mapped[str] = mapped_column(String, default="pending", index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None)
+    )
 
 
 class Listen(Base):
@@ -122,14 +124,27 @@ class Listen(Base):
             tz = ZoneInfo(timezone_name or "UTC")
         except Exception:
             tz = ZoneInfo("UTC")
-        now_local = datetime.now(tz)
-        start = datetime.combine(now_local.date(), time.min)
-        start_utc = start.replace(tzinfo=tz).astimezone(ZoneInfo("UTC")).replace(tzinfo=None)
-        end_utc = start_utc + timedelta(days=1)
+        start_utc, end_utc = cls._day_window_utc(datetime.now(tz), tz)
         return {
             "listens": cls._count_between(start_utc, end_utc),
             "albums": cls._distinct_releases_between(start_utc, end_utc),
         }
+
+    @staticmethod
+    def _day_window_utc(now_local: datetime, tz: ZoneInfo) -> tuple[datetime, datetime]:
+        """Naive-UTC bounds of the local calendar day containing ``now_local``.
+
+        Both midnights are converted from local time rather than adding 24h to
+        the UTC start, so a DST transition yields a 23- or 25-hour day instead
+        of leaking an hour of the adjacent day.
+        """
+        utc = ZoneInfo("UTC")
+        start_local = datetime.combine(now_local.date(), time.min, tzinfo=tz)
+        end_local = datetime.combine(now_local.date() + timedelta(days=1), time.min, tzinfo=tz)
+        return (
+            start_local.astimezone(utc).replace(tzinfo=None),
+            end_local.astimezone(utc).replace(tzinfo=None),
+        )
 
     @classmethod
     def _count_between(cls, start: datetime, end: datetime) -> int:

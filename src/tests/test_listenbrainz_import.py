@@ -1,11 +1,12 @@
 """Tests for ListenBrainz listen import, catalog matching, and listen metrics."""
 
 import pytest
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
 
 from databass import create_app
 from databass.db.base import app_db
-from databass.db.models import Artist, Genre, Label, Listen, Release
+from databass.db.models import Artist, Genre, Label, Listen, Release, ScrobbledAlbum
 from databass.listenbrainz_sync import (
     CatalogIndex,
     _import_batch,
@@ -183,6 +184,37 @@ class TestFavourites:
         ranking = {item["name"]: item["rating"] for item in Artist.favourites()}
         assert ranking["Artist A"] > ranking["Artist B"]
 
+    def test_favourites_matches_bayesian_with_fractional_averages(self, seeded_app):
+        """Truncation parity: fractional averages must round the same as before."""
+        artist = Artist(name="Fractional")
+        app_db.session.add(artist)
+        app_db.session.commit()
+        genre = app_db.session.query(Genre).first()
+        label = app_db.session.query(Label).first()
+        for i, rating in enumerate([90, 85, 81]):
+            app_db.session.add(
+                Release(mbid=None, artist_id=artist.id, label_id=label.id, name=f"Frac {i}",
+                        year=2020, runtime=1, rating=rating, listen_date=datetime(2024, 1, 1),
+                        track_count=1, main_genre_id=genre.id)
+            )
+        app_db.session.commit()
+
+        plain = {item["name"]: item["rating"] for item in Artist.average_ratings_bayesian()}
+        weighted = {item["name"]: item["rating"] for item in Artist.favourites()}
+        assert weighted == plain
+
+
+class TestTodayWindow:
+    def test_dst_spring_forward_day_is_23_hours(self):
+        """The local day, not start+24h, bounds the 'today' window."""
+        tz = ZoneInfo("America/Toronto")
+        # 2026-03-08 is the US/Canada spring-forward date.
+        now_local = datetime(2026, 3, 8, 12, 0, tzinfo=tz)
+        start, end = Listen._day_window_utc(now_local, tz)
+        assert start == datetime(2026, 3, 8, 5, 0)   # EST (UTC-5) midnight
+        assert end == datetime(2026, 3, 9, 4, 0)     # EDT (UTC-4) next midnight
+        assert end - start == timedelta(hours=23)
+
 
 class TestDetailSurfaces:
     def test_release_detail_includes_lb_listens(self, seeded_app):
@@ -244,6 +276,16 @@ class TestSyncFlow:
             assert second["imported"] == 0
             assert second["backfill_done"] is True
 
+    def test_sync_skips_when_already_running(self, seeded_app):
+        from databass import listenbrainz_sync as sync_mod
+
+        with seeded_app.app_context():
+            assert sync_mod._sync_lock.acquire(blocking=False)
+            try:
+                assert sync_mod.sync_listens().get("busy") is True
+            finally:
+                sync_mod._sync_lock.release()
+
 
 class TestSyncCursor:
     def test_sync_no_username_returns_empty(self, app, monkeypatch):
@@ -289,4 +331,48 @@ class TestApiSurfaces:
         client = seeded_app.test_client()
         payload = client.post("/api/listenbrainz/sync").get_json()
         assert payload["imported"] == 3
+
+    def test_logging_a_suggestion_creates_a_release(self, seeded_app, monkeypatch):
+        """Regression: the log payload must use name/mbid, not release_name/mbid."""
+        monkeypatch.setattr("databass.api.image.fetch_image", lambda **kwargs: None)
+        with seeded_app.app_context():
+            before = app_db.session.query(Release).filter_by(name="A One").count()
+            row = ScrobbledAlbum(
+                album_key="sug-1", artist_name="Artist A", artist_mbid="artist-a",
+                release_name="A One", release_mbid=None, release_group_mbid=None,
+                listened_at=datetime(2024, 6, 1), track_names=["t1", "t2", "t3"],
+                status="pending",
+            )
+            app_db.session.add(row)
+            app_db.session.commit()
+            suggestion_id = row.id
+
+        client = seeded_app.test_client()
+        resp = client.post(
+            f"/api/listenbrainz/suggestions/{suggestion_id}/log",
+            json={"rating": 80, "main_genre": "rock"},
+        )
+        assert resp.status_code == 201, resp.get_json()
+        with seeded_app.app_context():
+            assert app_db.session.query(Release).filter_by(name="A One").count() == before + 1
+            assert (
+                app_db.session.query(ScrobbledAlbum).filter_by(id=suggestion_id).one().status
+                == "logged"
+            )
+
+    def test_logging_a_suggestion_requires_a_genre(self, seeded_app):
+        with seeded_app.app_context():
+            row = ScrobbledAlbum(
+                album_key="sug-2", artist_name="Artist A", release_name="A One",
+                listened_at=datetime(2024, 6, 1), track_names=["t1"], status="pending",
+            )
+            app_db.session.add(row)
+            app_db.session.commit()
+            suggestion_id = row.id
+
+        client = seeded_app.test_client()
+        resp = client.post(
+            f"/api/listenbrainz/suggestions/{suggestion_id}/log", json={"rating": 80}
+        )
+        assert resp.status_code == 400
 

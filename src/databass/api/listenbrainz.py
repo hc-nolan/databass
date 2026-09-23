@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from typing import Any
 
 import requests
@@ -14,6 +15,20 @@ BASE_URL = "https://api.listenbrainz.org"
 class ListenBrainz:
     """ListenBrainz HTTP client with normalized responses for the app."""
 
+    # ListenBrainz asks clients to stay at or below one request per second.
+    MIN_INTERVAL = 1.0
+    _last_request_at = 0.0
+
+    @classmethod
+    def _throttle(cls) -> None:
+        if not cls._last_request_at:
+            cls._last_request_at = time.monotonic()
+            return
+        elapsed = time.monotonic() - cls._last_request_at
+        if elapsed < cls.MIN_INTERVAL:
+            time.sleep(cls.MIN_INTERVAL - elapsed)
+        cls._last_request_at = time.monotonic()
+
     @staticmethod
     def _headers() -> dict[str, str]:
         version = os.getenv("VERSION", "dev")
@@ -24,14 +39,31 @@ class ListenBrainz:
         return headers
 
     @classmethod
-    def _get(cls, path: str, params: dict[str, Any] | None = None) -> Any:
-        response = requests.get(
-            f"{BASE_URL}{path}", headers=cls._headers(), params=params, timeout=10
-        )
-        if response.status_code == 204:
-            return None
-        response.raise_for_status()
-        return response.json()
+    def _get(cls, path: str, params: dict[str, Any] | None = None, retries: int = 3) -> Any:
+        for attempt in range(retries + 1):
+            response = requests.get(
+                f"{BASE_URL}{path}", headers=cls._headers(), params=params, timeout=10
+            )
+            if response.status_code == 429 and attempt < retries:
+                cls._sleep_for_retry(response)
+                continue
+            if response.status_code == 204:
+                return None
+            response.raise_for_status()
+            return response.json()
+
+    @staticmethod
+    def _sleep_for_retry(response) -> None:
+        """Honour ListenBrainz's rate-limit headers before retrying a 429."""
+        for header in ("Retry-After", "X-RateLimit-Reset-In"):
+            raw = response.headers.get(header)
+            if raw:
+                try:
+                    time.sleep(min(max(float(raw), 1.0), 60.0))
+                    return
+                except ValueError:
+                    pass
+        time.sleep(2.0)
 
     @classmethod
     def fetch_listens(
@@ -47,6 +79,7 @@ class ListenBrainz:
             params["min_ts"] = min_ts
         if max_ts is not None:
             params["max_ts"] = max_ts
+        cls._throttle()
         payload = cls._get(f"/1/user/{username}/listens", params) or {}
         return [cls.normalize_listen(item) for item in payload.get("payload", {}).get("listens", [])]
 
