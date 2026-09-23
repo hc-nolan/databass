@@ -20,6 +20,23 @@ class TestHome:
         assert response.status_code == 200
         assert "total_logged" in response.json
 
+    def test_home_does_not_show_expired_goal(self, client, mocker):
+        now = datetime.now()
+        expired = Goal(
+            id=1,
+            start=now - timedelta(days=365),
+            end=now - timedelta(days=1),
+            completed=None,
+            type="release",
+            amount=1500,
+        )
+        mocker.patch("databass.db.models.Goal.get_incomplete", return_value=[expired])
+
+        response = client.get("/api/home")
+
+        assert response.status_code == 200
+        assert response.json["goal"] is None
+
 
 class TestNew:
     # Tests for /api/new
