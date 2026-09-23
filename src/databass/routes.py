@@ -474,20 +474,39 @@ def register_routes(app):
 
     @app.route("/api/listenbrainz/sync", methods=["POST"])
     def api_listenbrainz_sync():
-        return jsonify(sync_listens())
+        try:
+            return jsonify(sync_listens())
+        except Exception as err:
+            return jsonify({"error": friendly_message(err)}), 500
 
     @app.route("/api/listenbrainz/suggestions/<int:suggestion_id>/<action>", methods=["POST"])
     def api_listenbrainz_suggestion_action(suggestion_id, action):
         row = models.ScrobbledAlbum.exists_by_id(suggestion_id)
         if not row or action not in ("dismiss", "log"):
             abort(404)
+
+        def claim(new_status: str) -> bool:
+            """Atomically move a pending suggestion to `new_status`."""
+            updated = (
+                app_db.session.query(models.ScrobbledAlbum)
+                .filter_by(id=suggestion_id, status="pending")
+                .update({"status": new_status})
+            )
+            app_db.session.commit()
+            return bool(updated)
+
         if action == "dismiss":
-            row.status = "dismissed"
-            db.update(row)
+            if not claim("dismissed"):
+                return jsonify({"error": "Suggestion is no longer pending"}), 409
             return jsonify({"ok": True})
+
         data = request.get_json() or {}
         if not data.get("main_genre"):
             return jsonify({"error": "A genre is required to log a listen"}), 400
+        # Claim first so a retried/overlapping log can't insert a second
+        # Release for the same suggestion.
+        if not claim("logged"):
+            return jsonify({"error": "Suggestion is no longer pending"}), 409
         # handle_submit_data() expects the same keys the /api/submit search
         # flow produces, i.e. `name`/`mbid` (not release_name/release_mbid).
         submit = {
@@ -504,9 +523,12 @@ def register_routes(app):
         try:
             completed = handle_submit_data(submit)
         except Exception as err:
+            # Release the claim so the user can retry after fixing the input.
+            app_db.session.query(models.ScrobbledAlbum).filter_by(
+                id=suggestion_id, status="logged"
+            ).update({"status": "pending"})
+            app_db.session.commit()
             return jsonify({"error": friendly_message(err)}), 400
-        row.status = "logged"
-        db.update(row)
         return jsonify({"ok": True, "completed_goals": [build_completed_goal_notice(g) for g in completed]}), 201
 
     @app.route("/api/listenbrainz/recommendations", methods=["GET"])

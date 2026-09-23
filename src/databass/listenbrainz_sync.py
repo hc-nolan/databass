@@ -174,18 +174,23 @@ def _as_utc(epoch: int) -> datetime:
     return datetime.fromtimestamp(epoch, timezone.utc).replace(tzinfo=None)
 
 
+def _existing_listen_keys(timestamps: set) -> set:
+    """Already-stored (listened_at, dedupe_key) pairs for the given timestamps."""
+    if not timestamps:
+        return set()
+    rows = app_db.session.query(Listen.listened_at, Listen.dedupe_key).filter(
+        Listen.listened_at.in_(timestamps)
+    )
+    return {(row[0], row[1]) for row in rows}
+
+
 def _import_batch(batch: list[dict], index: CatalogIndex) -> tuple[int, int]:
     """Store new scrobbles and detect album listens. Returns (imported, suggestions)."""
     if not batch:
         return 0, 0
 
     timestamps = {_as_utc(item["listened_at"]) for item in batch if item.get("listened_at")}
-    existing = set()
-    if timestamps:
-        rows = app_db.session.query(Listen.listened_at, Listen.dedupe_key).filter(
-            Listen.listened_at.in_(timestamps)
-        )
-        existing = {(row[0], row[1]) for row in rows}
+    existing = _existing_listen_keys(timestamps)
 
     imported = 0
     for item in batch:
@@ -197,31 +202,33 @@ def _import_batch(batch: list[dict], index: CatalogIndex) -> tuple[int, int]:
             continue
         release_id = index.resolve_release(item)
         index.learn(item, release_id)
-        app_db.session.add(
-            Listen(
-                listened_at=listened_at,
-                dedupe_key=key,
-                track_name=item.get("track_name"),
-                artist_name=item.get("artist_name"),
-                artist_mbid=item.get("artist_mbid"),
-                release_name=item.get("release_name"),
-                release_mbid=item.get("release_mbid"),
-                release_group_mbid=item.get("release_group_mbid"),
-                recording_mbid=item.get("recording_mbid"),
-                release_id=release_id,
-                artist_id=index.resolve_artist(item),
-            )
-        )
+        try:
+            # Savepoint per row: a duplicate (e.g. a concurrent sync) only
+            # rolls back its own insert, so the rest of the batch — and the
+            # cursor the caller advances afterwards — stays consistent.
+            with app_db.session.begin_nested():
+                app_db.session.add(
+                    Listen(
+                        listened_at=listened_at,
+                        dedupe_key=key,
+                        track_name=item.get("track_name"),
+                        artist_name=item.get("artist_name"),
+                        artist_mbid=item.get("artist_mbid"),
+                        release_name=item.get("release_name"),
+                        release_mbid=item.get("release_mbid"),
+                        release_group_mbid=item.get("release_group_mbid"),
+                        recording_mbid=item.get("recording_mbid"),
+                        release_id=release_id,
+                        artist_id=index.resolve_artist(item),
+                    )
+                )
+        except IntegrityError:
+            continue
         existing.add((listened_at, key))
         imported += 1
 
     suggestions = _store_suggestions(batch)
-    try:
-        app_db.session.commit()
-    except IntegrityError:
-        # A duplicate slipped past the pre-check (e.g. a concurrent sync in
-        # another process); drop the batch and let the next run retry.
-        app_db.session.rollback()
+    app_db.session.commit()
     return imported, suggestions
 
 
@@ -243,7 +250,11 @@ def _store_suggestions(batch: list[dict]) -> int:
             continue
         if item.get("release_mbid") and Release.exists_by_mbid(item["release_mbid"]):
             continue
-        app_db.session.add(ScrobbledAlbum(**{**item, "listened_at": local_date}))
+        try:
+            with app_db.session.begin_nested():
+                app_db.session.add(ScrobbledAlbum(**{**item, "listened_at": local_date}))
+        except IntegrityError:
+            continue
         created += 1
     return created
 

@@ -121,6 +121,28 @@ class TestImportBatch:
         assert row.release_id is not None
         assert row.artist_id is not None
 
+    def test_batch_conflict_does_not_lose_other_listens(self, seeded_app, monkeypatch):
+        """A duplicate row must not roll back the rest of the batch (nor the cursor)."""
+        from databass import listenbrainz_sync as sync_mod
+
+        index = CatalogIndex()
+        _import_batch([_listen(recording_mbid="dup", listened_at=1_700_000_000)], index)
+
+        # Simulate the race the pre-check can miss: pretend the existing row
+        # wasn't visible, so the insert hits the unique constraint and must be
+        # caught by the per-row savepoint.
+        monkeypatch.setattr(sync_mod, "_existing_listen_keys", lambda timestamps: set())
+        imported, _ = _import_batch(
+            [
+                _listen(recording_mbid="dup", listened_at=1_700_000_000),
+                _listen(recording_mbid="fresh", listened_at=1_700_000_050),
+            ],
+            CatalogIndex(),
+        )
+        assert imported == 1
+        assert app_db.session.query(Listen).filter_by(recording_mbid="fresh").count() == 1
+        assert app_db.session.query(Listen).count() == 2
+
     def test_relink_fills_listens_saved_before_release(self, seeded_app):
         index = CatalogIndex()
         # Import something that cannot match yet ...
@@ -375,4 +397,46 @@ class TestApiSurfaces:
             f"/api/listenbrainz/suggestions/{suggestion_id}/log", json={"rating": 80}
         )
         assert resp.status_code == 400
+
+    def test_relogging_a_suggestion_is_rejected(self, seeded_app, monkeypatch):
+        """A retried log must not create a second Release (idempotency)."""
+        monkeypatch.setattr("databass.api.image.fetch_image", lambda **kwargs: None)
+        with seeded_app.app_context():
+            row = ScrobbledAlbum(
+                album_key="sug-3", artist_name="Artist A", artist_mbid="artist-a",
+                release_name="A One", listened_at=datetime(2024, 6, 1),
+                track_names=["t1", "t2", "t3"], status="pending",
+            )
+            app_db.session.add(row)
+            app_db.session.commit()
+            suggestion_id = row.id
+
+        client = seeded_app.test_client()
+        url = f"/api/listenbrainz/suggestions/{suggestion_id}/log"
+        body = {"rating": 80, "main_genre": "rock"}
+        assert client.post(url, json=body).status_code == 201
+        with seeded_app.app_context():
+            after_first = app_db.session.query(Release).filter_by(name="A One").count()
+        assert client.post(url, json=body).status_code == 409
+        with seeded_app.app_context():
+            assert app_db.session.query(Release).filter_by(name="A One").count() == after_first
+
+    def test_cannot_log_a_dismissed_suggestion(self, seeded_app):
+        with seeded_app.app_context():
+            row = ScrobbledAlbum(
+                album_key="sug-4", artist_name="Artist A", release_name="A One",
+                listened_at=datetime(2024, 6, 1), track_names=["t1"], status="pending",
+            )
+            app_db.session.add(row)
+            app_db.session.commit()
+            suggestion_id = row.id
+
+        client = seeded_app.test_client()
+        assert client.post(
+            f"/api/listenbrainz/suggestions/{suggestion_id}/dismiss"
+        ).status_code == 200
+        assert client.post(
+            f"/api/listenbrainz/suggestions/{suggestion_id}/log",
+            json={"rating": 80, "main_genre": "rock"},
+        ).status_code == 409
 
