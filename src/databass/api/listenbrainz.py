@@ -39,11 +39,28 @@ class ListenBrainz:
         return headers
 
     @classmethod
-    def _get(cls, path: str, params: dict[str, Any] | None = None, retries: int = 3) -> Any:
+    def _get(
+        cls,
+        path: str,
+        params: dict[str, Any] | None = None,
+        retries: int = 3,
+        timeout: float = 15.0,
+    ) -> Any:
         for attempt in range(retries + 1):
-            response = requests.get(
-                f"{BASE_URL}{path}", headers=cls._headers(), params=params, timeout=10
-            )
+            try:
+                response = requests.get(
+                    f"{BASE_URL}{path}",
+                    headers=cls._headers(),
+                    params=params,
+                    timeout=timeout,
+                )
+            except requests.exceptions.RequestException:
+                # Transient network blip (timeout, connection reset): back off
+                # and retry rather than aborting the whole import run.
+                if attempt < retries:
+                    time.sleep(2.0 * (attempt + 1))
+                    continue
+                raise
             if response.status_code == 429 and attempt < retries:
                 cls._sleep_for_retry(response)
                 continue
@@ -80,7 +97,9 @@ class ListenBrainz:
         if max_ts is not None:
             params["max_ts"] = max_ts
         cls._throttle()
-        payload = cls._get(f"/1/user/{username}/listens", params) or {}
+        payload = (
+            cls._get(f"/1/user/{username}/listens", params, timeout=30.0) or {}
+        )
         return [cls.normalize_listen(item) for item in payload.get("payload", {}).get("listens", [])]
 
     @staticmethod

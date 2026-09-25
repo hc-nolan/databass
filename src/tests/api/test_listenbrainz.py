@@ -60,3 +60,17 @@ def test_get_retries_on_rate_limit(mocker):
     )
     mocker.patch.object(ListenBrainz, "_sleep_for_retry")
     assert ListenBrainz._get("/anything") == {"ok": True}
+
+
+def test_get_retries_on_network_error(mocker):
+    """A transient read timeout should be retried, not abort the import run."""
+    import requests
+
+    ok = mocker.Mock(status_code=200)
+    ok.json.return_value = {"ok": True}
+    mocker.patch(
+        "databass.api.listenbrainz.requests.get",
+        side_effect=[requests.exceptions.ReadTimeout("slow"), ok],
+    )
+    mocker.patch("databass.api.listenbrainz.time.sleep")
+    assert ListenBrainz._get("/anything") == {"ok": True}

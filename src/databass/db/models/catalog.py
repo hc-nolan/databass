@@ -1099,8 +1099,10 @@ class ArtistOrLabel(MusicBrainzEntity):
         # average_ratings_bayesian(), so with no listen data the two produce
         # identical scores (the weighted average is fractional once listens
         # exist, but the display scale is whole 0-100 either way).
+        # Postgres returns SUM() as Decimal, which can't be mixed with the
+        # float arithmetic below, so coerce both aggregates to float here.
         weighted = [
-            (int(row.weighted_sum / row.total_weight), row.total_weight, row)
+            (int(float(row.weighted_sum) / float(row.total_weight)), float(row.total_weight), row)
             for row in rows
             if row.total_weight
         ]
@@ -1112,7 +1114,7 @@ class ArtistOrLabel(MusicBrainzEntity):
 
         items = []
         for avg, weight, row in weighted:
-            shrink = weight / (weight + mean_weight) if (weight + mean_weight) else 0
+            shrink = weight / (weight + mean_weight) if (weight + mean_weight) else 0.0
             score = shrink * avg + (1 - shrink) * mean_avg
             items.append(
                 {
@@ -1121,7 +1123,7 @@ class ArtistOrLabel(MusicBrainzEntity):
                     "rating": round(score),
                     "image": row.image,
                     "count": row.release_count,
-                    "listens": int(row.total_weight - row.release_count),
+                    "listens": int(weight) - int(row.release_count),
                 }
             )
 

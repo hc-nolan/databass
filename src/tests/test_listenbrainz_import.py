@@ -225,6 +225,22 @@ class TestFavourites:
         weighted = {item["name"]: item["rating"] for item in Artist.favourites()}
         assert weighted == plain
 
+    def test_favourites_handles_decimal_aggregates(self, seeded_app, mocker):
+        """Postgres returns SUM() as Decimal; must not mix Decimal with float."""
+        from decimal import Decimal
+
+        class Row:
+            id = 1
+            name = "A"
+            image = None
+            weighted_sum = Decimal("1700")
+            total_weight = Decimal("20")
+            release_count = 2
+
+        mocker.patch.object(Artist, "listen_weighted_ratings", return_value=[Row()])
+        result = Artist.favourites()
+        assert result and result[0]["rating"] == 85
+
 
 class TestTodayWindow:
     def test_dst_spring_forward_day_is_23_hours(self):
